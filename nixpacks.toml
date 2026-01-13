@@ -1,3 +1,6 @@
+[variables]
+VITE_API_BASE_URL = "https://maxi-gestao-gestao-backend.gkgtsp.easypanel.host/api"
+
 [phases.install]
 cmds = ["rm -rf node_modules", "npm install --force"]
 
