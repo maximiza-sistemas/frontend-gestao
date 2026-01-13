@@ -1,0 +1,1302 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { OrderStatus } from '../../types';
+import { Order, useOrders } from '../../hooks/useOrders';
+import { api } from '../../services/api';
+import PageHeader from '../common/PageHeader';
+import FilterBar from '../common/FilterBar';
+import Modal from '../common/Modal';
+import Button from '../common/Button';
+import Badge from '../common/Badge';
+import Toast from '../common/Toast';
+import OrderFormSimplified from '../common/OrderFormSimplified';
+
+const getOrderStatusVariant = (status: OrderStatus) => {
+    const map = {
+        'Entregue': 'success',
+        'Em Rota': 'info',
+        'Pendente': 'warning',
+        'Cancelado': 'danger'
+    };
+    return map[status] as 'success' | 'info' | 'warning' | 'danger';
+};
+
+interface PaymentModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string }) => void;
+    order: any;
+    onDiscountUpdate?: () => void;
+}
+
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, order, onDiscountUpdate }) => {
+    const [amount, setAmount] = useState<string>('');
+    const [paymentMethod, setPaymentMethod] = useState<'Dinheiro' | 'Pix' | 'Cartão' | 'Transferência' | 'Depósito'>('Dinheiro');
+    const [notes, setNotes] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [discount, setDiscount] = useState<string>('0');
+    const [editingDiscount, setEditingDiscount] = useState(false);
+    const [savingDiscount, setSavingDiscount] = useState(false);
+    const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
+    const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Estado para armazenar os dados atualizados do pedido
+    const [savedDiscount, setSavedDiscount] = useState<number | null>(null);
+    const [savedPendingAmount, setSavedPendingAmount] = useState<number | null>(null);
+
+    // Buscar histórico de pagamentos ao abrir o modal
+    useEffect(() => {
+        if (isOpen && order?.id) {
+            setLoadingHistory(true);
+            import('../../services/api').then(m => m.api.getOrderPayments(order.id))
+                .then(response => {
+                    if (response.success) {
+                        setPaymentHistory(response.data || []);
+                    }
+                })
+                .catch(console.error)
+                .finally(() => setLoadingHistory(false));
+        }
+    }, [isOpen, order?.id]);
+
+    const orderTotal = Number(order?.totalValue ?? order?.total_value ?? 0);
+    // Usar o desconto salvo localmente se disponível, senão usar o do order
+    const currentDiscount = savedDiscount !== null ? savedDiscount : Number(order?.discount ?? 0);
+    const appliedDiscount = editingDiscount ? parseFloat(discount) || 0 : currentDiscount;
+    const totalWithDiscount = orderTotal - appliedDiscount;
+    const paidAmount = Number(order?.paid_amount ?? 0);
+    // Usar o pending_amount salvo localmente se disponível
+    const pendingAmount = savedPendingAmount !== null
+        ? savedPendingAmount
+        : Math.max(0, totalWithDiscount - paidAmount);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Resetar os estados salvos quando o modal abre
+            setSavedDiscount(null);
+            setSavedPendingAmount(null);
+            const initialDiscount = Number(order?.discount ?? 0);
+            setDiscount(initialDiscount.toFixed(2));
+            setEditingDiscount(false);
+            const initialPending = Math.max(0, orderTotal - initialDiscount - paidAmount);
+            if (initialPending > 0) {
+                setAmount(initialPending.toFixed(2));
+            }
+            setPaymentMethod('Dinheiro');
+            setNotes('');
+        }
+    }, [isOpen, order?.id]);
+
+    // Atualizar o amount quando o pendingAmount muda
+    useEffect(() => {
+        if (isOpen && pendingAmount > 0 && !editingDiscount) {
+            setAmount(pendingAmount.toFixed(2));
+        }
+    }, [pendingAmount, isOpen, editingDiscount]);
+
+    if (!isOpen || !order) return null;
+
+    const handleSaveDiscount = async () => {
+        const numDiscount = parseFloat(discount);
+        if (isNaN(numDiscount) || numDiscount < 0) {
+            alert('Digite um valor de desconto válido');
+            return;
+        }
+        if (numDiscount > orderTotal) {
+            alert(`O desconto não pode ser maior que o valor total (R$ ${orderTotal.toFixed(2)})`);
+            return;
+        }
+
+        setSavingDiscount(true);
+        try {
+            const response = await api.updateOrderDiscount(order.id, numDiscount);
+            if (response.success && response.data) {
+                // Atualizar os estados locais com os dados retornados da API
+                const data = response.data as { discount: string | number; pending_amount: string | number };
+                const newDiscount = parseFloat(String(data.discount));
+                const newPendingAmount = parseFloat(String(data.pending_amount));
+                setSavedDiscount(newDiscount);
+                setSavedPendingAmount(newPendingAmount);
+                setDiscount(newDiscount.toFixed(2));
+                setEditingDiscount(false);
+                setAmount(newPendingAmount.toFixed(2));
+                if (onDiscountUpdate) {
+                    onDiscountUpdate();
+                }
+            } else {
+                alert(response.error || 'Erro ao salvar desconto');
+            }
+        } catch (error) {
+            alert('Erro ao salvar desconto');
+        } finally {
+            setSavingDiscount(false);
+        }
+    };
+
+    const handleSubmit = async () => {
+        const numAmount = parseFloat(amount);
+        if (isNaN(numAmount) || numAmount <= 0) {
+            alert('Informe um valor válido');
+            return;
+        }
+        if (numAmount > pendingAmount) {
+            alert(`Valor máximo: R$ ${pendingAmount.toFixed(2)}`);
+            return;
+        }
+
+        setLoading(true);
+        try {
+            await onSave({ amount: numAmount, payment_method: paymentMethod, notes, payment_date: paymentDate });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-[500px] shadow-xl max-h-[90vh] overflow-y-auto">
+                <h3 className="text-lg font-bold mb-2 text-gray-800">
+                    <i className="fa-solid fa-money-bill-wave text-green-600 mr-2"></i>
+                    Registrar Pagamento
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                    Pedido #{order.id} - <strong>{order.clientName}</strong>
+                </p>
+
+                {/* Resumo */}
+                <div className="bg-gray-50 p-3 rounded-md mb-4 grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                        <p className="text-gray-500">Total</p>
+                        <p className="font-bold">{orderTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500">Já Pago</p>
+                        <p className="font-bold text-green-600">{paidAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500">Pendente</p>
+                        <p className="font-bold text-red-600">{pendingAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                </div>
+
+                {/* Desconto */}
+                <div className="bg-orange-50 border border-orange-200 p-3 rounded-md mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                        <label className="text-sm font-medium text-orange-800">
+                            <i className="fa-solid fa-percent mr-2"></i>Desconto
+                        </label>
+                        {!editingDiscount && (
+                            <button
+                                type="button"
+                                onClick={() => setEditingDiscount(true)}
+                                className="text-xs text-orange-600 hover:text-orange-800 underline"
+                            >
+                                <i className="fa-solid fa-edit mr-1"></i>Editar
+                            </button>
+                        )}
+                    </div>
+
+                    {editingDiscount ? (
+                        <div className="flex gap-2 items-center">
+                            <div className="relative flex-1">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max={orderTotal}
+                                    value={discount}
+                                    onChange={(e) => setDiscount(e.target.value)}
+                                    className="w-full border border-orange-300 rounded-md p-2 pl-10 focus:ring-orange-500 focus:border-orange-500"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleSaveDiscount}
+                                disabled={savingDiscount}
+                                className="px-3 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 text-sm"
+                            >
+                                {savingDiscount ? <i className="fa-solid fa-spinner fa-spin"></i> : '✓ Salvar'}
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setDiscount(currentDiscount.toFixed(2));
+                                    setEditingDiscount(false);
+                                }}
+                                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm"
+                            >
+                                Cancelar
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="flex items-center justify-between">
+                            <span className="text-lg font-bold text-orange-700">
+                                {currentDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </span>
+                            {currentDiscount > 0 && (
+                                <span className="text-xs text-gray-500">
+                                    Total c/ desconto: {totalWithDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Formulário */}
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Valor do Pagamento (R$)</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            max={pendingAmount}
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                            placeholder="0.00"
+                        />
+                        <div className="flex gap-2 mt-2">
+                            <button
+                                type="button"
+                                onClick={() => setAmount((pendingAmount / 2).toFixed(2))}
+                                className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                            >
+                                50%
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAmount(pendingAmount.toFixed(2))}
+                                className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded"
+                            >
+                                Total
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Forma de Pagamento</label>
+                        <div className="grid grid-cols-3 gap-2">
+                            {(['Dinheiro', 'Pix', 'Cartão', 'Transferência', 'Depósito'] as const).map((method) => (
+                                <button
+                                    key={method}
+                                    type="button"
+                                    onClick={() => setPaymentMethod(method)}
+                                    className={`p-2 border rounded-md text-sm font-medium transition-colors ${paymentMethod === method
+                                        ? 'bg-green-600 text-white border-green-600'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {method === 'Dinheiro' && '💵'}
+                                    {method === 'Pix' && '📱'}
+                                    {method === 'Cartão' && '💳'}
+                                    {method === 'Transferência' && '🏦'}
+                                    {method === 'Depósito' && '💰'}
+                                    {' '}{method}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
+                        <input
+                            type="date"
+                            value={paymentDate}
+                            onChange={(e) => setPaymentDate(e.target.value)}
+                            className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Observações (opcional)</label>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            rows={2}
+                            className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                            placeholder="Ex: Parcela 1 de 3..."
+                        />
+                    </div>
+
+                    {/* Histórico de Pagamentos */}
+                    {paymentHistory.length > 0 && (
+                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-md">
+                            <h4 className="text-sm font-medium text-blue-800 mb-2">
+                                <i className="fa-solid fa-history mr-2"></i>
+                                Histórico de Pagamentos ({paymentHistory.length})
+                            </h4>
+                            <div className="max-h-32 overflow-y-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead className="bg-blue-100">
+                                        <tr>
+                                            <th className="px-2 py-1 text-left">Data</th>
+                                            <th className="px-2 py-1 text-right">Valor</th>
+                                            <th className="px-2 py-1 text-left">Método</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {paymentHistory.map((payment, index) => (
+                                            <tr key={payment.id || index} className="border-b border-blue-100">
+                                                <td className="px-2 py-1">
+                                                    {new Date(payment.payment_date).toLocaleDateString('pt-BR')}
+                                                </td>
+                                                <td className="px-2 py-1 text-right font-medium text-green-700">
+                                                    {Number(payment.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                                </td>
+                                                <td className="px-2 py-1">{payment.payment_method}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+                    {loadingHistory && (
+                        <div className="text-center text-gray-500 text-sm">
+                            <i className="fa-solid fa-spinner fa-spin mr-2"></i>Carregando histórico...
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                        disabled={loading}
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={loading || pendingAmount <= 0}
+                        className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50"
+                    >
+                        {loading ? (
+                            <><i className="fa-solid fa-spinner fa-spin mr-2"></i>Salvando...</>
+                        ) : (
+                            <>💰 Confirmar Pagamento</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+interface OrderStatusModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (status: string) => void;
+    currentStatus: string;
+    orderId: number;
+}
+
+const OrderStatusModal: React.FC<OrderStatusModalProps> = ({ isOpen, onClose, onSave, currentStatus, orderId }) => {
+    const [status, setStatus] = useState(currentStatus);
+
+    useEffect(() => {
+        setStatus(currentStatus);
+    }, [currentStatus]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-96 shadow-xl">
+                <h3 className="text-lg font-bold mb-4 text-gray-800">Alterar Status do Pedido</h3>
+                <p className="text-sm text-gray-600 mb-4">Pedido #{orderId}</p>
+
+                <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <select
+                        value={status}
+                        onChange={(e) => setStatus(e.target.value)}
+                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-orange-500 focus:border-orange-500"
+                    >
+                        <option value="Pendente">Pendente</option>
+                        <option value="Entregue">Entregue</option>
+                    </select>
+                </div>
+
+                <div className="flex justify-end space-x-3">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={() => onSave(status)}
+                        className="px-4 py-2 text-white bg-orange-600 rounded-md hover:bg-orange-700"
+                    >
+                        Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const OrderForm: React.FC<{
+    onSave: (order: any) => void;
+    onClose: () => void;
+    orderToEdit: Order | null;
+}> = ({ onSave, onClose, orderToEdit }) => {
+    const isEditing = !!orderToEdit;
+    const [clients, setClients] = useState<any[]>([]);
+    const [products, setProducts] = useState<any[]>([]);
+
+    // Form State
+    const [clientId, setClientId] = useState(orderToEdit?.clientId || '');
+    const [date, setDate] = useState(orderToEdit?.date || new Date().toISOString().split('T')[0]);
+    const [status, setStatus] = useState<OrderStatus>(orderToEdit?.status || 'Pendente');
+    const [paymentStatus, setPaymentStatus] = useState<'Pendente' | 'Pago'>(orderToEdit?.paymentStatus || 'Pendente');
+    const [paymentMethod, setPaymentMethod] = useState<'Dinheiro' | 'Pix' | 'Prazo' | 'Misto'>(orderToEdit?.paymentMethod || 'Dinheiro');
+    const [cashAmount, setCashAmount] = useState(orderToEdit?.cashAmount || 0);
+    const [termAmount, setTermAmount] = useState(orderToEdit?.termAmount || 0);
+    const [installments, setInstallments] = useState(orderToEdit?.installments || 1);
+    const [dueDate, setDueDate] = useState(orderToEdit?.dueDate || '');
+    const [notes, setNotes] = useState(orderToEdit?.notes || '');
+
+    // Items State
+    const [selectedItems, setSelectedItems] = useState<{ product_id: number, quantity: number, unit_price: number, name: string, supplier_id?: number, supplier_name?: string, cost_price?: number }[]>([]);
+    const [currentProduct, setCurrentProduct] = useState('');
+    const [currentQuantity, setCurrentQuantity] = useState(1);
+    const [currentSupplier, setCurrentSupplier] = useState('');
+    const [productSuppliers, setProductSuppliers] = useState<{ supplier_id: number, supplier_name: string, cost_price: number, is_default: boolean }[]>([]);
+    const [estimatedMargin, setEstimatedMargin] = useState<number | null>(null);
+
+    // Derived State
+    const totalValue = useMemo(() => {
+        return selectedItems.reduce((acc, item) => acc + (item.quantity * item.unit_price), 0);
+    }, [selectedItems]);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [clientsRes, productsRes] = await Promise.all([
+                    api.getClients({ status: 'Ativo' }),
+                    api.getProducts({ status: 'Ativo' })
+                ]);
+
+                if (clientsRes.success) setClients(clientsRes.data || []);
+                if (productsRes.success) setProducts(productsRes.data || []);
+            } catch (error) {
+                console.error('Erro ao carregar dados:', error);
+            }
+        };
+        fetchData();
+    }, []);
+
+    // Fetch suppliers when product changes
+    useEffect(() => {
+        if (currentProduct) {
+            const fetchProductCosts = async () => {
+                try {
+                    const response = await api.getProductCosts(Number(currentProduct));
+                    if (response.success && Array.isArray(response.data)) {
+                        const costs = response.data;
+                        setProductSuppliers(costs.map((c: any) => ({
+                            supplier_id: c.supplier_id,
+                            supplier_name: c.supplier_name,
+                            cost_price: Number(c.cost_price),
+                            is_default: c.is_default
+                        })));
+
+                        // Auto-select default supplier
+                        const defaultSupplier = costs.find((c: any) => c.is_default);
+                        if (defaultSupplier) {
+                            setCurrentSupplier(defaultSupplier.supplier_id.toString());
+                        } else {
+                            setCurrentSupplier('');
+                        }
+                    } else {
+                        setProductSuppliers([]);
+                        setCurrentSupplier('');
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar fornecedores do produto:', error);
+                    setProductSuppliers([]);
+                }
+            };
+            fetchProductCosts();
+        } else {
+            setProductSuppliers([]);
+            setCurrentSupplier('');
+        }
+    }, [currentProduct]);
+
+    // Calculate estimated margin
+    useEffect(() => {
+        if (currentProduct) {
+            const product = products.find(p => p.id.toString() === currentProduct);
+            if (product) {
+                const priceSell = Number(product.price_sell);
+                let costPrice = Number(product.price_buy); // Fallback
+
+                if (currentSupplier) {
+                    const supplier = productSuppliers.find(s => s.supplier_id.toString() === currentSupplier);
+                    if (supplier) {
+                        costPrice = supplier.cost_price;
+                    }
+                } else if (productSuppliers.length > 0) {
+                    // If no supplier selected but defaults exist, maybe use default? 
+                    // Logic here: if user explicitly selects nothing, use product base cost.
+                    // But we auto-select default above.
+                }
+
+                if (priceSell > 0) {
+                    const margin = ((priceSell - costPrice) / priceSell) * 100;
+                    setEstimatedMargin(margin);
+                } else {
+                    setEstimatedMargin(null);
+                }
+            }
+        } else {
+            setEstimatedMargin(null);
+        }
+    }, [currentProduct, currentSupplier, products, productSuppliers]);
+
+
+    // Update cash/term amounts when total changes or method changes
+    useEffect(() => {
+        if (paymentMethod === 'Dinheiro' || paymentMethod === 'Pix') {
+            setCashAmount(totalValue);
+            setTermAmount(0);
+        } else if (paymentMethod === 'Prazo') {
+            setCashAmount(0);
+            setTermAmount(totalValue);
+        }
+    }, [totalValue, paymentMethod]);
+
+    const handleAddItem = () => {
+        if (!currentProduct) return;
+        const product = products.find(p => p.id.toString() === currentProduct);
+        if (!product) return;
+
+        let supplierName = undefined;
+        let costPrice = undefined;
+
+        if (currentSupplier) {
+            const supplier = productSuppliers.find(s => s.supplier_id.toString() === currentSupplier);
+            if (supplier) {
+                supplierName = supplier.supplier_name;
+                costPrice = supplier.cost_price;
+            }
+        }
+
+        const newItem = {
+            product_id: product.id,
+            quantity: currentQuantity,
+            unit_price: Number(product.price_sell),
+            name: product.name,
+            supplier_id: currentSupplier ? Number(currentSupplier) : undefined,
+            supplier_name: supplierName,
+            cost_price: costPrice
+        };
+
+        setSelectedItems([...selectedItems, newItem]);
+        setCurrentProduct('');
+        setCurrentQuantity(1);
+        setCurrentSupplier('');
+        setEstimatedMargin(null);
+    };
+
+    const handleRemoveItem = (index: number) => {
+        setSelectedItems(selectedItems.filter((_, i) => i !== index));
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        if (!clientId) {
+            alert('Selecione um cliente!');
+            return;
+        }
+
+        if (selectedItems.length === 0) {
+            alert('Adicione pelo menos um produto ao pedido!');
+            return;
+        }
+
+        // Validações de pagamento
+        if (paymentMethod === 'Misto') {
+            if (Math.abs((cashAmount + termAmount) - totalValue) > 0.01) {
+                alert('A soma dos valores à vista e a prazo deve ser igual ao valor total!');
+                return;
+            }
+        }
+
+        if ((paymentMethod === 'Prazo' || paymentMethod === 'Misto') && !dueDate) {
+            alert('Data de vencimento é obrigatória para pagamentos a prazo!');
+            return;
+        }
+
+        onSave({
+            client_id: Number(clientId),
+            order_date: date,
+            status,
+            payment_method: paymentMethod,
+            payment_status: paymentStatus,
+            payment_cash_amount: paymentMethod === 'Dinheiro' || paymentMethod === 'Pix' ? totalValue : cashAmount,
+            payment_term_amount: paymentMethod === 'Prazo' ? totalValue : termAmount,
+            payment_installments: installments,
+            payment_due_date: dueDate || undefined,
+            items: selectedItems.map(item => ({
+                product_id: item.product_id,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                supplier_id: item.supplier_id
+            })),
+            notes
+        });
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <div className="space-y-4">
+                {/* Cliente e Data */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label htmlFor="order-client" className="block text-sm font-medium text-gray-700">Cliente</label>
+                        <select id="order-client" value={clientId} onChange={e => setClientId(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500" required>
+                            <option value="" disabled>Selecione um cliente</option>
+                            {clients.map(client => (
+                                <option key={client.id} value={client.id}>{client.name}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label htmlFor="order-date" className="block text-sm font-medium text-gray-700">Data do Pedido</label>
+                        <input type="date" id="order-date" value={date} onChange={e => setDate(e.target.value)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500" required />
+                    </div>
+                </div>
+
+                {/* Seleção de Produtos */}
+                <div className="border-t pt-4 mt-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Itens do Pedido</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-2 mb-2 items-end">
+                        <div className="md:col-span-4">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Produto</label>
+                            <select
+                                value={currentProduct}
+                                onChange={e => setCurrentProduct(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                            >
+                                <option value="" disabled>Selecione um produto</option>
+                                {products.map(product => (
+                                    <option key={product.id} value={product.id}>
+                                        {product.name} - R$ {Number(product.price_sell).toFixed(2)}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="md:col-span-4">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Fornecedor (Custo)</label>
+                            <select
+                                value={currentSupplier}
+                                onChange={e => setCurrentSupplier(e.target.value)}
+                                disabled={!currentProduct}
+                                className="w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500 disabled:bg-gray-100"
+                            >
+                                <option value="">Padrão / Sem Fornecedor</option>
+                                {productSuppliers.map(s => (
+                                    <option key={s.supplier_id} value={s.supplier_id}>
+                                        {s.supplier_name} (R$ {s.cost_price.toFixed(2)})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Qtd</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={currentQuantity}
+                                onChange={e => setCurrentQuantity(parseInt(e.target.value) || 1)}
+                                className="w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <Button type="button" onClick={handleAddItem} disabled={!currentProduct} className="w-full">Adicionar</Button>
+                        </div>
+                    </div>
+                    {estimatedMargin !== null && (
+                        <div className="text-xs text-gray-500 mb-2">
+                            Margem Estimada: <span className={estimatedMargin >= 20 ? 'text-green-600 font-bold' : 'text-orange-600 font-bold'}>{estimatedMargin.toFixed(1)}%</span>
+                        </div>
+                    )}
+
+                    {/* Lista de Itens */}
+                    <div className="bg-gray-50 rounded-md p-2 mb-2">
+                        {selectedItems.length === 0 ? (
+                            <p className="text-sm text-gray-500 text-center">Nenhum item adicionado.</p>
+                        ) : (
+                            <ul className="space-y-2">
+                                {selectedItems.map((item, index) => (
+                                    <li key={index} className="flex justify-between items-center text-sm bg-white p-2 rounded shadow-sm">
+                                        <div>
+                                            <span className="font-medium">{item.quantity}x {item.name}</span>
+                                            {item.supplier_name && (
+                                                <span className="text-xs text-gray-500 block">Fornecedor: {item.supplier_name}</span>
+                                            )}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span>R$ {(item.quantity * item.unit_price).toFixed(2)}</span>
+                                            <button type="button" onClick={() => handleRemoveItem(index)} className="text-red-500 hover:text-red-700">
+                                                <i className="fa-solid fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </div>
+                    <div className="text-right font-bold text-lg">
+                        Total: R$ {totalValue.toFixed(2)}
+                    </div>
+                </div>
+
+                {/* Pagamento */}
+                <div className="border-t pt-4 mt-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Informações de Pagamento</h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="payment-method" className="block text-sm font-medium text-gray-700">Método de Pagamento</label>
+                            <select
+                                id="payment-method"
+                                value={paymentMethod}
+                                onChange={e => setPaymentMethod(e.target.value as any)}
+                                className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                            >
+                                <option value="Dinheiro">À Vista - Dinheiro</option>
+                                <option value="Pix">À Vista - Pix</option>
+                                <option value="Prazo">A Prazo</option>
+                                <option value="Misto">Misto (Parte à vista + Parte a prazo)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label htmlFor="order-status" className="block text-sm font-medium text-gray-700">Status do Pedido</label>
+                            <select id="order-status" value={status} onChange={e => setStatus(e.target.value as any)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                <option value="Pendente">Pendente</option>
+                                <option value="Em Rota">Em Rota</option>
+                                <option value="Entregue">Entregue</option>
+                                <option value="Cancelado">Cancelado</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label htmlFor="payment-status" className="block text-sm font-medium text-gray-700">Status do Pagamento</label>
+                            <select id="payment-status" value={paymentStatus} onChange={e => setPaymentStatus(e.target.value as any)} className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500">
+                                <option value="Pendente">Pendente</option>
+                                <option value="Pago">Pago</option>
+                            </select>
+                        </div>
+
+                        {(paymentMethod === 'Misto') && (
+                            <>
+                                <div>
+                                    <label htmlFor="cash-amount" className="block text-sm font-medium text-gray-700">Valor à Vista (R$)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        id="cash-amount"
+                                        value={cashAmount}
+                                        onChange={e => {
+                                            const cash = parseFloat(e.target.value) || 0;
+                                            setCashAmount(cash);
+                                            setTermAmount(totalValue - cash);
+                                        }}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="term-amount" className="block text-sm font-medium text-gray-700">Valor a Prazo (R$)</label>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        id="term-amount"
+                                        value={termAmount}
+                                        onChange={e => {
+                                            const term = parseFloat(e.target.value) || 0;
+                                            setTermAmount(term);
+                                            setCashAmount(totalValue - term);
+                                        }}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        {(paymentMethod === 'Prazo' || paymentMethod === 'Misto') && (
+                            <>
+                                <div>
+                                    <label htmlFor="installments" className="block text-sm font-medium text-gray-700">Número de Parcelas</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="12"
+                                        id="installments"
+                                        value={installments}
+                                        onChange={e => setInstallments(parseInt(e.target.value) || 1)}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                                        required
+                                    />
+                                </div>
+
+                                <div>
+                                    <label htmlFor="due-date" className="block text-sm font-medium text-gray-700">Vencimento da 1ª Parcela</label>
+                                    <input
+                                        type="date"
+                                        id="due-date"
+                                        value={dueDate}
+                                        onChange={e => setDueDate(e.target.value)}
+                                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div>
+                    <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Observações</label>
+                    <textarea
+                        id="notes"
+                        rows={3}
+                        value={notes}
+                        onChange={e => setNotes(e.target.value)}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
+                    />
+                </div>
+
+                <div className="mt-6 flex justify-end space-x-3">
+                    <Button type="button" variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button type="submit" variant="primary">{isEditing ? 'Salvar Alterações' : 'Salvar Pedido'}</Button>
+                </div>
+            </div>
+        </form>
+    );
+};
+
+
+const Vendas: React.FC = () => {
+    const { orders, loading, error, createOrder, updateOrder, updateOrderStatus, refetchOrders } = useOrders();
+    const [modalState, setModalState] = useState<'form' | 'details' | 'cancel' | 'reopen' | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+    const [showToast, setShowToast] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
+    const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+    const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
+
+    const [searchTerm, setSearchTerm] = useState('');
+    const [statusFilter, setStatusFilter] = useState('Todos');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+
+    const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+        setToastMessage(message);
+        setToastType(type);
+        setShowToast(true);
+    };
+
+    const handleOpenModal = (state: 'form' | 'details' | 'cancel' | 'reopen', order: Order | null) => {
+        setSelectedOrder(order);
+        setModalState(state);
+    };
+
+    const handleCloseModals = () => {
+        setModalState(null);
+        setSelectedOrder(null);
+        setIsPaymentModalOpen(false);
+        setSelectedOrderForPayment(null);
+        setIsStatusModalOpen(false);
+        setSelectedOrderForStatus(null);
+    };
+
+    const handleSaveOrder = async (orderData: Omit<Order, 'id'>) => {
+        try {
+            let result;
+            if (selectedOrder) {
+                result = await updateOrder(selectedOrder.id, orderData);
+            } else {
+                result = await createOrder(orderData);
+            }
+
+            if (result.success) {
+                showMessage(selectedOrder ? 'Pedido atualizado com sucesso' : 'Pedido criado com sucesso', 'success');
+                handleCloseModals();
+            } else {
+                showMessage(result.error || 'Erro ao salvar pedido', 'error');
+            }
+        } catch (error) {
+            showMessage('Erro de conexão ao salvar pedido', 'error');
+        }
+    };
+
+    const handleConfirmCancel = async () => {
+        if (selectedOrder) {
+            try {
+                const result = await updateOrderStatus(selectedOrder.id, 'Cancelado');
+                if (result.success) {
+                    showMessage('Pedido cancelado com sucesso', 'success');
+                    handleCloseModals();
+                } else {
+                    showMessage(result.error || 'Erro ao cancelar pedido', 'error');
+                }
+            } catch (error) {
+                showMessage('Erro de conexão ao cancelar pedido', 'error');
+            }
+        }
+    };
+
+    const handleConfirmReopen = async () => {
+        if (selectedOrder) {
+            try {
+                const result = await updateOrderStatus(selectedOrder.id, 'Pendente');
+                if (result.success) {
+                    showMessage('Pedido reaberto com sucesso', 'success');
+                    handleCloseModals();
+                } else {
+                    showMessage(result.error || 'Erro ao reabrir pedido', 'error');
+                }
+            } catch (error) {
+                showMessage('Erro de conexão ao reabrir pedido', 'error');
+            }
+        }
+    };
+
+    const handlePaymentStatusClick = (order: Order) => {
+        setSelectedOrderForPayment(order);
+        setIsPaymentModalOpen(true);
+    };
+
+    const handlePaymentSave = async (paymentData: { amount: number; payment_method: string; notes?: string }) => {
+        if (!selectedOrderForPayment) return;
+
+        try {
+            const response = await api.createOrderPayment(selectedOrderForPayment.id, paymentData);
+            if (response.success) {
+                showMessage(`Pagamento de ${paymentData.amount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} registrado com sucesso!`, 'success');
+                refetchOrders();
+                handleCloseModals();
+            } else {
+                showMessage(response.error || 'Erro ao registrar pagamento', 'error');
+            }
+        } catch (error) {
+            showMessage('Erro de conexão ao registrar pagamento', 'error');
+        }
+    };
+
+    const handleOrderStatusClick = (order: Order) => {
+        setSelectedOrderForStatus(order);
+        setIsStatusModalOpen(true);
+    };
+
+    const handleOrderStatusSave = async (newStatus: string) => {
+        if (!selectedOrderForStatus) return;
+
+        const result = await updateOrderStatus(selectedOrderForStatus.id, newStatus);
+        if (result.success) {
+            showMessage('Status do pedido atualizado com sucesso', 'success');
+            handleCloseModals();
+        } else {
+            showMessage(result.error || 'Erro ao atualizar status do pedido', 'error');
+        }
+    };
+
+    const clearFilters = () => {
+        setSearchTerm('');
+        setStatusFilter('Todos');
+        setStartDate('');
+        setEndDate('');
+    };
+
+    const filteredOrders = useMemo(() => {
+        return orders.filter(order => {
+            const matchesSearch = order.clientName.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesStatus = statusFilter === 'Todos' || order.status === statusFilter;
+            const orderDate = new Date(order.date);
+            const start = startDate ? new Date(startDate) : null;
+            const end = endDate ? new Date(endDate) : null;
+            if (start) start.setHours(0, 0, 0, 0);
+            if (end) end.setHours(23, 59, 59, 999);
+            const matchesDate = (!start || orderDate >= start) && (!end || orderDate <= end);
+            return matchesSearch && matchesStatus && matchesDate;
+        });
+    }, [orders, searchTerm, statusFilter, startDate, endDate]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-screen">
+                <div className="text-center">
+                    <i className="fa-solid fa-spinner fa-spin text-4xl text-orange-600 mb-4"></i>
+                    <p className="text-gray-600">Carregando pedidos...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="p-8">
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                    <p className="font-bold">Erro ao carregar pedidos</p>
+                    <p>{error}</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <Modal
+                isOpen={modalState === 'form'}
+                onClose={handleCloseModals}
+                title={selectedOrder ? 'Editar Pedido' : 'Novo Pedido'}
+                size="lg"
+            >
+                <OrderFormSimplified onClose={handleCloseModals} onSave={handleSaveOrder} />
+            </Modal>
+
+            <Modal
+                isOpen={modalState === 'details' && !!selectedOrder}
+                onClose={handleCloseModals}
+                title={`Detalhes do Pedido #${selectedOrder?.id}`}
+            >
+                {selectedOrder &&
+                    <div className="space-y-4">
+                        <div><p className="text-sm font-medium text-gray-500">Cliente</p><p className="text-lg">{selectedOrder.clientName}</p></div>
+                        <div><p className="text-sm font-medium text-gray-500">Data</p><p className="text-lg">{new Date(selectedOrder.date).toLocaleDateString('pt-BR')}</p></div>
+                        <div><p className="text-sm font-medium text-gray-500">Valor Total</p><p className="text-lg font-bold">{selectedOrder.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
+                        <div><p className="text-sm font-medium text-gray-500">Status</p><Badge variant={getOrderStatusVariant(selectedOrder.status)}>{selectedOrder.status}</Badge></div>
+
+                        {selectedOrder.paymentMethod && (
+                            <div className="border-t pt-4">
+                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Informações de Pagamento</h4>
+                                <div className="space-y-2">
+                                    <div><p className="text-sm font-medium text-gray-500">Método</p>
+                                        <p className="text-base">
+                                            {selectedOrder.paymentMethod === 'Dinheiro' && 'À Vista - Dinheiro'}
+                                            {selectedOrder.paymentMethod === 'Pix' && 'À Vista - Pix'}
+                                            {selectedOrder.paymentMethod === 'Prazo' && 'A Prazo'}
+                                            {selectedOrder.paymentMethod === 'Misto' && 'Misto'}
+                                        </p>
+                                    </div>
+
+                                    {selectedOrder.paymentMethod === 'Misto' && (
+                                        <>
+                                            <div><p className="text-sm font-medium text-gray-500">Valor à Vista</p>
+                                                <p className="text-base">{(selectedOrder.cashAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                            </div>
+                                            <div><p className="text-sm font-medium text-gray-500">Valor a Prazo</p>
+                                                <p className="text-base">{(selectedOrder.termAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {(selectedOrder.paymentMethod === 'Prazo' || selectedOrder.paymentMethod === 'Misto') && (
+                                        <>
+                                            <div><p className="text-sm font-medium text-gray-500">Parcelas</p>
+                                                <p className="text-base">{selectedOrder.installments || 1}x de {((selectedOrder.paymentMethod === 'Prazo' ? selectedOrder.totalValue : (selectedOrder.termAmount || 0)) / (selectedOrder.installments || 1)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                                            </div>
+                                            {selectedOrder.dueDate && (
+                                                <div><p className="text-sm font-medium text-gray-500">Vencimento</p>
+                                                    <p className="text-base">{new Date(selectedOrder.dueDate).toLocaleDateString('pt-BR')}</p>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="mt-6 flex justify-end">
+                            <Button variant="secondary" onClick={handleCloseModals}>Fechar</Button>
+                        </div>
+                    </div>
+                }
+            </Modal>
+
+            <Modal
+                isOpen={modalState === 'cancel' && !!selectedOrder}
+                onClose={handleCloseModals}
+                title="Confirmar Cancelamento"
+            >
+                <p>Tem certeza que deseja cancelar o pedido <strong>#{selectedOrder?.id}</strong>?</p>
+                <div className="mt-6 flex justify-end space-x-3">
+                    <Button variant="secondary" onClick={handleCloseModals}>Voltar</Button>
+                    <Button variant="danger" onClick={handleConfirmCancel}>Confirmar</Button>
+                </div>
+            </Modal>
+
+            <Modal
+                isOpen={modalState === 'reopen' && !!selectedOrder}
+                onClose={handleCloseModals}
+                title="Confirmar Reabertura"
+            >
+                <p>Tem certeza que deseja reabrir o pedido <strong>#{selectedOrder?.id}</strong>? O status será "Pendente".</p>
+                <div className="mt-6 flex justify-end space-x-3">
+                    <Button variant="secondary" onClick={handleCloseModals}>Voltar</Button>
+                    <Button variant="success" onClick={handleConfirmReopen}>Confirmar</Button>
+                </div>
+            </Modal>
+
+            <div className="space-y-6">
+                <PageHeader title="Vendas & Pedidos" buttonLabel="Novo Pedido" onButtonClick={() => handleOpenModal('form', null)} />
+
+                <FilterBar onClearFilters={clearFilters}>
+                    <input type="text" placeholder="Pesquisar por cliente..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white" />
+                    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white">
+                        <option value="Todos">Todos os Status</option>
+                        <option value="Pendente">Pendente</option>
+                        <option value="Em Rota">Em Rota</option>
+                        <option value="Entregue">Entregue</option>
+                        <option value="Cancelado">Cancelado</option>
+                    </select>
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white" />
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white" />
+                </FilterBar>
+
+                <div className="bg-white p-4 rounded-lg shadow-sm overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-500">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                            <tr>
+                                <th scope="col" className="px-6 py-3 sticky left-0 bg-gray-50 z-10">ID do Pedido</th>
+                                <th scope="col" className="px-6 py-3 sticky left-[100px] bg-gray-50 z-10">Cliente</th>
+                                <th scope="col" className="px-6 py-3">Data</th>
+                                <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
+                                <th scope="col" className="px-6 py-3 text-right">Desconto</th>
+                                <th scope="col" className="px-6 py-3 text-right">Despesas</th>
+                                <th scope="col" className="px-6 py-3 text-right">Pago</th>
+                                <th scope="col" className="px-6 py-3 text-right">Pendente</th>
+                                <th scope="col" className="px-6 py-3 text-center">Pagamento</th>
+                                <th scope="col" className="px-6 py-3 text-center">Status</th>
+                                <th scope="col" className="px-6 py-3 text-center">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {filteredOrders.map(order => (
+                                <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-medium text-gray-900 sticky left-0 bg-white z-10">#{order.id}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap sticky left-[100px] bg-white z-10 font-medium">{order.clientName}</td>
+                                    <td className="px-6 py-4">{new Date(order.date).toLocaleDateString('pt-BR')}</td>
+                                    <td className="px-6 py-4 text-right">{order.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className={`font-medium ${(order.discount || 0) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                            {(order.discount || 0) > 0
+                                                ? `- ${(order.discount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                                : '-'
+                                            }
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="text-red-600 font-medium">
+                                            {((order as any).expenses || 0) > 0
+                                                ? `- ${((order as any).expenses || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`
+                                                : '-'
+                                            }
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="text-green-600 font-medium">
+                                            {((order as any).paid_amount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className={`font-medium ${((order as any).pending_amount || order.totalValue) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                            {((order as any).pending_amount ?? order.totalValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="text-xs font-medium">
+                                            {order.paymentMethod === 'Dinheiro' && '💵 Dinheiro'}
+                                            {order.paymentMethod === 'Pix' && '📱 Pix'}
+                                            {order.paymentMethod === 'Prazo' && `📅 ${order.installments || 1}x`}
+                                            {order.paymentMethod === 'Misto' && '💰 Misto'}
+                                            {!order.paymentMethod && '-'}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <div onClick={() => handleOrderStatusClick(order)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                                            <Badge variant={getOrderStatusVariant(order.status)}>
+                                                {order.status} <i className="fas fa-pencil-alt ml-1 text-[10px]"></i>
+                                            </Badge>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex justify-center space-x-2">
+                                            {((order as any).pending_amount ?? order.totalValue) > 0 && (
+                                                <button
+                                                    onClick={() => handlePaymentStatusClick(order)}
+                                                    className="px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors"
+                                                >
+                                                    💰 Pagar
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleOpenModal('details', order)} className="font-medium text-blue-600 hover:underline text-xs">Detalhes</button>
+                                            <button onClick={() => handleOpenModal('form', order)} className="font-medium text-orange-600 hover:underline text-xs">Editar</button>
+                                            {order.status === 'Cancelado' ? (
+                                                <button onClick={() => handleOpenModal('reopen', order)} className="font-medium text-green-600 hover:underline text-xs">Reabrir</button>
+                                            ) : (
+                                                <button onClick={() => handleOpenModal('cancel', order)} className="font-medium text-red-600 hover:underline text-xs disabled:text-gray-400 disabled:no-underline" disabled={order.status === 'Entregue'}>
+                                                    Cancelar
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {selectedOrderForPayment && (
+                <PaymentModal
+                    isOpen={isPaymentModalOpen}
+                    onClose={() => setIsPaymentModalOpen(false)}
+                    onSave={handlePaymentSave}
+                    order={selectedOrderForPayment}
+                    onDiscountUpdate={refetchOrders}
+                />
+            )}
+
+            {selectedOrderForStatus && (
+                <OrderStatusModal
+                    isOpen={isStatusModalOpen}
+                    onClose={() => setIsStatusModalOpen(false)}
+                    onSave={handleOrderStatusSave}
+                    currentStatus={selectedOrderForStatus.status}
+                    orderId={selectedOrderForStatus.id}
+                />
+            )}
+
+            {showToast && (
+                <Toast
+                    message={toastMessage}
+                    type={toastType}
+                    onClose={() => setShowToast(false)}
+                />
+            )}
+        </>
+    );
+};
+
+export default Vendas;
