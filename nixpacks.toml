@@ -1,11 +1,8 @@
-[variables]
-VITE_API_BASE_URL = "https://maxi-gestao-gestao-backend.gkgtsp.easypanel.host/api"
-
 [phases.install]
 cmds = ["rm -rf node_modules", "npm install --force"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = ["VITE_API_BASE_URL=https://maxi-gestao-gestao-backend.gkgtsp.easypanel.host/api npm run build"]
 
 [start]
 cmd = "caddy run --config /app/Caddyfile --adapter caddyfile"
