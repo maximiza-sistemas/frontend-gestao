@@ -1,26 +1,29 @@
 // Configuração base da API
-const DEFAULT_API_BASE_URL = 'http://localhost:3000/api';
+const PRODUCTION_API_URL = 'https://maxi-gestao-gestao-backend.gkgtsp.easypanel.host/api';
+const DEV_API_URL = 'http://localhost:3000/api';
 
 const resolveApiBaseUrl = () => {
+  // Primeiro, tenta usar a variável de ambiente
   const envBaseUrl = (import.meta as any)?.env?.VITE_API_BASE_URL?.trim();
   if (envBaseUrl) {
     return envBaseUrl.replace(/\/$/, '');
   }
 
+  // Em ambiente de produção (não localhost), usar URL de produção
   if (typeof window !== 'undefined' && window.location) {
     const { origin } = window.location;
 
+    // Se estiver em localhost, usar API de desenvolvimento
     if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
       const portAdjustedOrigin = origin.replace(/:(5173|4173|8080)$/, ':3000');
       return `${portAdjustedOrigin.replace(/\/$/, '')}/api`;
     }
+
+    // Se não estiver em localhost, usar URL de produção
+    return PRODUCTION_API_URL;
   }
 
-  console.warn(
-    '[API] VITE_API_BASE_URL não configurada. Utilizando fallback padrão:',
-    DEFAULT_API_BASE_URL
-  );
-  return DEFAULT_API_BASE_URL;
+  return DEV_API_URL;
 };
 
 const API_BASE_URL = resolveApiBaseUrl();
