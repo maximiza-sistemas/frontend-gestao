@@ -1,0 +1,19 @@
+:80 {
+    root * /app/dist
+    encode gzip
+    
+    # Serve static files with proper MIME types
+    file_server {
+        precompressed gzip
+    }
+    
+    # SPA fallback - serve index.html for all routes not found
+    try_files {path} /index.html
+    
+    # Explicit MIME types for JavaScript modules
+    @js path *.js *.mjs
+    header @js Content-Type application/javascript
+    
+    @css path *.css
+    header @css Content-Type text/css
+}

@@ -1,2 +1,8 @@
 [phases.install]
 cmds = ["rm -rf node_modules", "npm install --force"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "caddy run --config /app/Caddyfile --adapter caddyfile"
