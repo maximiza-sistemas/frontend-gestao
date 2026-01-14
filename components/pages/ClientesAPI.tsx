@@ -47,7 +47,6 @@ const ClientForm: React.FC<{
         zip_code: clientToEdit?.zip_code || '',
         cpf_cnpj: clientToEdit?.cpf_cnpj || '',
         status: clientToEdit?.status || 'Ativo' as const,
-        credit_limit: clientToEdit?.credit_limit || 0,
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -281,20 +280,6 @@ const ClientForm: React.FC<{
                         {errors.cpf_cnpj && (
                             <p className="mt-1 text-sm text-red-600">{errors.cpf_cnpj}</p>
                         )}
-                    </div>
-                    <div>
-                        <label htmlFor="client-credit-limit" className="block text-sm font-medium text-gray-700">
-                            Limite de Crédito (R$)
-                        </label>
-                        <input
-                            type="number"
-                            id="client-credit-limit"
-                            value={formData.credit_limit}
-                            onChange={e => handleChange('credit_limit', parseFloat(e.target.value) || 0)}
-                            className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
-                            min="0"
-                            step="0.01"
-                        />
                     </div>
                 </div>
             </div>
@@ -619,9 +604,6 @@ const ClientesAPI: React.FC = () => {
                                     Status
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                    Limite Crédito
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Saldo em Aberto
                                 </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -672,9 +654,6 @@ const ClientesAPI: React.FC = () => {
                                         <Badge variant={client.status === 'Ativo' ? 'success' : 'danger'}>
                                             {client.status}
                                         </Badge>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {formatCurrency(client.credit_limit)}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`font-medium ${(client.open_balance || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
