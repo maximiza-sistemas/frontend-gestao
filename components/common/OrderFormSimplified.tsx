@@ -64,6 +64,9 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
     // Observações
     const [observacoes, setObservacoes] = useState('');
 
+    // Comprovante
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+
     // Loading
     const [loading, setLoading] = useState(false);
 
@@ -205,7 +208,8 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
             expenses: despesasNumerico,
             gross_value: valorBruto,
             net_value: valorLiquido,
-            payment_details: JSON.stringify(paymentDetails)
+            payment_details: JSON.stringify(paymentDetails),
+            receipt_file: receiptFile || undefined
         };
 
         setLoading(true);
@@ -593,6 +597,28 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                     placeholder="Observações adicionais..."
                 />
             </div>
+
+            {/* Comprovante de Pagamento */}
+            {tipoPagamento !== 'a_prazo' || houveEntrada ? (
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <i className="fa-solid fa-file-image mr-1"></i>Comprovante (opcional)
+                    </label>
+                    <input
+                        type="file"
+                        accept="image/jpeg,image/png,application/pdf"
+                        onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
+                    />
+                    {receiptFile && (
+                        <p className="text-xs text-green-600 mt-1">
+                            <i className="fa-solid fa-check mr-1"></i>
+                            {receiptFile.name}
+                        </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">JPG, PNG ou PDF até 5MB</p>
+                </div>
+            ) : null}
 
             {/* Botões */}
             <div className="flex justify-end gap-3 pt-4 border-t">
