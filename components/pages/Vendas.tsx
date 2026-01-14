@@ -91,7 +91,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             }
             setPaymentMethod('Dinheiro');
             setSelectedBank('');
-            setPaymentTime(new Date().toTimeString().slice(0, 5)); // HH:MM format
+            setPaymentTime(''); // Hora deve ser inserida manualmente
             setNotes('');
         }
     }, [isOpen, order?.id]);
