@@ -478,7 +478,8 @@ class ApiService {
   }
 
   getPaymentReceiptUrl(orderId: number, paymentId: number): string {
-    return `${API_BASE_URL}/orders/${orderId}/payments/${paymentId}/receipt`;
+    const token = this.token || '';
+    return `${API_BASE_URL}/orders/${orderId}/payments/${paymentId}/receipt?token=${token}`;
   }
 
   async updateOrderDiscount(orderId: number, discount: number) {
