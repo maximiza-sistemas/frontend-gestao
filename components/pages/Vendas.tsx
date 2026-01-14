@@ -507,6 +507,191 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
     );
 };
 
+// Componente para exibir detalhes do pedido com histórico de pagamentos
+interface OrderDetailsContentProps {
+    order: Order;
+    onClose: () => void;
+}
+
+const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClose }) => {
+    const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(true);
+
+    useEffect(() => {
+        const fetchPaymentHistory = async () => {
+            try {
+                const response = await api.getOrderPayments(order.id);
+                if (response.success) {
+                    setPaymentHistory(response.data || []);
+                }
+            } catch (error) {
+                console.error('Erro ao buscar histórico de pagamentos:', error);
+            } finally {
+                setLoadingHistory(false);
+            }
+        };
+        fetchPaymentHistory();
+    }, [order.id]);
+
+    const orderTotal = Number(order.totalValue ?? order.total_value ?? 0);
+    const discount = Number(order.discount ?? 0);
+    const totalWithDiscount = orderTotal - discount;
+    const paidAmount = Number(order.paid_amount ?? 0);
+    const pendingAmount = Math.max(0, totalWithDiscount - paidAmount);
+
+    return (
+        <div className="space-y-4">
+            {/* Informações básicas do pedido */}
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <p className="text-sm font-medium text-gray-500">Cliente</p>
+                    <p className="text-lg font-semibold">{order.clientName}</p>
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-500">Data do Pedido</p>
+                    <p className="text-lg">{new Date(order.date).toLocaleDateString('pt-BR')}</p>
+                </div>
+            </div>
+
+            {/* Resumo financeiro */}
+            <div className="bg-gray-50 p-4 rounded-lg">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                    <i className="fa-solid fa-receipt mr-2"></i>Resumo Financeiro
+                </h4>
+                <div className="grid grid-cols-4 gap-3 text-sm">
+                    <div>
+                        <p className="text-gray-500">Total</p>
+                        <p className="font-bold text-lg">{orderTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500">Desconto</p>
+                        <p className="font-bold text-orange-600">{discount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500">Pago</p>
+                        <p className="font-bold text-green-600">{paidAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                    </div>
+                    <div>
+                        <p className="text-gray-500">Pendente</p>
+                        <p className={`font-bold ${pendingAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {pendingAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Status do pedido */}
+            <div className="flex items-center gap-4">
+                <div>
+                    <p className="text-sm font-medium text-gray-500">Status</p>
+                    <Badge variant={getOrderStatusVariant(order.status)}>{order.status}</Badge>
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-500">Pagamento</p>
+                    <Badge variant={pendingAmount === 0 ? 'success' : 'warning'}>
+                        {pendingAmount === 0 ? 'Pago' : 'Pendente'}
+                    </Badge>
+                </div>
+            </div>
+
+            {/* Histórico de Pagamentos */}
+            <div className="border-t pt-4">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                    <i className="fa-solid fa-history mr-2"></i>
+                    Histórico de Pagamentos ({paymentHistory.length})
+                </h4>
+
+                {loadingHistory ? (
+                    <div className="text-center py-4 text-gray-500">
+                        <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                        Carregando histórico...
+                    </div>
+                ) : paymentHistory.length === 0 ? (
+                    <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
+                        <i className="fa-solid fa-info-circle mr-2"></i>
+                        Nenhum pagamento registrado
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm">
+                            <thead className="bg-blue-50">
+                                <tr>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Data</th>
+                                    <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Método</th>
+                                    <th className="px-3 py-2 text-left font-medium text-gray-700">Observações</th>
+                                    <th className="px-3 py-2 text-center font-medium text-gray-700">Comprovante</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {paymentHistory.map((payment, index) => (
+                                    <tr key={payment.id || index} className="hover:bg-gray-50">
+                                        <td className="px-3 py-2 whitespace-nowrap">
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">
+                                                    {new Date(payment.payment_date).toLocaleDateString('pt-BR')}
+                                                </span>
+                                                <span className="text-xs text-gray-400">
+                                                    Reg: {new Date(payment.created_at).toLocaleDateString('pt-BR')}
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-semibold text-green-700">
+                                            {Number(payment.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                        </td>
+                                        <td className="px-3 py-2">
+                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100">
+                                                {payment.payment_method === 'Dinheiro' && '💵'}
+                                                {payment.payment_method === 'Pix' && '📱'}
+                                                {payment.payment_method === 'Cartão' && '💳'}
+                                                {payment.payment_method === 'Transferência' && '🏦'}
+                                                {payment.payment_method === 'Depósito' && '💰'}
+                                                {' '}{payment.payment_method}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600 max-w-[200px] truncate" title={payment.notes || ''}>
+                                            {payment.notes || '-'}
+                                        </td>
+                                        <td className="px-3 py-2 text-center">
+                                            {payment.receipt_file ? (
+                                                <a
+                                                    href={api.getPaymentReceiptUrl(order.id, payment.id)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-800 bg-blue-50 rounded hover:bg-blue-100"
+                                                    title="Ver comprovante"
+                                                >
+                                                    <i className="fa-solid fa-file-image mr-1"></i>
+                                                    Ver
+                                                </a>
+                                            ) : (
+                                                <span className="text-gray-400">-</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                            <tfoot className="bg-gray-50">
+                                <tr>
+                                    <td className="px-3 py-2 font-semibold">Total Pago</td>
+                                    <td className="px-3 py-2 text-right font-bold text-green-700">
+                                        {paymentHistory.reduce((sum, p) => sum + Number(p.amount), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </td>
+                                    <td colSpan={3}></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            <div className="mt-6 flex justify-end">
+                <Button variant="secondary" onClick={onClose}>Fechar</Button>
+            </div>
+        </div>
+    );
+};
+
 interface OrderStatusModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -1200,58 +1385,10 @@ const Vendas: React.FC = () => {
                 isOpen={modalState === 'details' && !!selectedOrder}
                 onClose={handleCloseModals}
                 title={`Detalhes do Pedido #${selectedOrder?.id}`}
+                size="lg"
             >
                 {selectedOrder &&
-                    <div className="space-y-4">
-                        <div><p className="text-sm font-medium text-gray-500">Cliente</p><p className="text-lg">{selectedOrder.clientName}</p></div>
-                        <div><p className="text-sm font-medium text-gray-500">Data</p><p className="text-lg">{new Date(selectedOrder.date).toLocaleDateString('pt-BR')}</p></div>
-                        <div><p className="text-sm font-medium text-gray-500">Valor Total</p><p className="text-lg font-bold">{selectedOrder.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p></div>
-                        <div><p className="text-sm font-medium text-gray-500">Status</p><Badge variant={getOrderStatusVariant(selectedOrder.status)}>{selectedOrder.status}</Badge></div>
-
-                        {selectedOrder.paymentMethod && (
-                            <div className="border-t pt-4">
-                                <h4 className="text-sm font-semibold text-gray-700 mb-2">Informações de Pagamento</h4>
-                                <div className="space-y-2">
-                                    <div><p className="text-sm font-medium text-gray-500">Método</p>
-                                        <p className="text-base">
-                                            {selectedOrder.paymentMethod === 'Dinheiro' && 'À Vista - Dinheiro'}
-                                            {selectedOrder.paymentMethod === 'Pix' && 'À Vista - Pix'}
-                                            {selectedOrder.paymentMethod === 'Prazo' && 'A Prazo'}
-                                            {selectedOrder.paymentMethod === 'Misto' && 'Misto'}
-                                        </p>
-                                    </div>
-
-                                    {selectedOrder.paymentMethod === 'Misto' && (
-                                        <>
-                                            <div><p className="text-sm font-medium text-gray-500">Valor à Vista</p>
-                                                <p className="text-base">{(selectedOrder.cashAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                                            </div>
-                                            <div><p className="text-sm font-medium text-gray-500">Valor a Prazo</p>
-                                                <p className="text-base">{(selectedOrder.termAmount || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {(selectedOrder.paymentMethod === 'Prazo' || selectedOrder.paymentMethod === 'Misto') && (
-                                        <>
-                                            <div><p className="text-sm font-medium text-gray-500">Parcelas</p>
-                                                <p className="text-base">{selectedOrder.installments || 1}x de {((selectedOrder.paymentMethod === 'Prazo' ? selectedOrder.totalValue : (selectedOrder.termAmount || 0)) / (selectedOrder.installments || 1)).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                                            </div>
-                                            {selectedOrder.dueDate && (
-                                                <div><p className="text-sm font-medium text-gray-500">Vencimento</p>
-                                                    <p className="text-base">{new Date(selectedOrder.dueDate).toLocaleDateString('pt-BR')}</p>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="mt-6 flex justify-end">
-                            <Button variant="secondary" onClick={handleCloseModals}>Fechar</Button>
-                        </div>
-                    </div>
+                    <OrderDetailsContent order={selectedOrder} onClose={handleCloseModals} />
                 }
             </Modal>
 
