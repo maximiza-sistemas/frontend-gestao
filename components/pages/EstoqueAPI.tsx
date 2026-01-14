@@ -699,9 +699,6 @@ const EstoqueAPI: React.FC = () => {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Peso (kg)</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Preço Venda</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Preço Compra</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Margem</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                   </tr>
@@ -709,7 +706,7 @@ const EstoqueAPI: React.FC = () => {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {products.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                      <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                         <i className="fa-solid fa-inbox text-4xl mb-2"></i>
                         <p>Nenhum produto encontrado</p>
                         <p className="text-sm mt-2">Clique em "Cadastrar Produto" para adicionar o primeiro produto</p>
@@ -717,13 +714,6 @@ const EstoqueAPI: React.FC = () => {
                     </tr>
                   ) : (
                     products.map((product) => {
-                      const priceSell = product.price_sell ? Number(product.price_sell) : null;
-                      const priceBuy = product.price_buy ? Number(product.price_buy) : null;
-
-                      const margin = priceBuy && priceSell
-                        ? ((priceSell - priceBuy) / priceBuy * 100).toFixed(1)
-                        : null;
-
                       return (
                         <tr key={product.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -734,26 +724,6 @@ const EstoqueAPI: React.FC = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700">
                             {product.weight_kg ? `${product.weight_kg} kg` : '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            <span className="text-sm font-semibold text-green-700">
-                              {priceSell ? `R$ ${priceSell.toFixed(2)}` : 'R$ 0,00'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-gray-700">
-                            {priceBuy ? `R$ ${priceBuy.toFixed(2)}` : '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-center">
-                            {margin ? (
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${parseFloat(margin) >= 30 ? 'bg-green-100 text-green-800' :
-                                parseFloat(margin) >= 15 ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
-                                }`}>
-                                {margin}%
-                              </span>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-center">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.status === 'Ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
