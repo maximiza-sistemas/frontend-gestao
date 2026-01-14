@@ -184,7 +184,20 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                 <div className="bg-gray-50 p-3 rounded-md mb-4 grid grid-cols-3 gap-2 text-sm">
                     <div>
                         <p className="text-gray-500">Total</p>
-                        <p className="font-bold">{orderTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
+                        <p className="font-bold">
+                            {currentDiscount > 0 ? (
+                                <>
+                                    <span className="line-through text-gray-400 text-xs mr-1">
+                                        {orderTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                    <span className="text-blue-600">
+                                        {totalWithDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                    </span>
+                                </>
+                            ) : (
+                                orderTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                            )}
+                        </p>
                     </div>
                     <div>
                         <p className="text-gray-500">Já Pago</p>
