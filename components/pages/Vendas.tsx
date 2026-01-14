@@ -382,27 +382,28 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                 </div>
                             </div>
 
-                            {/* Upload de Comprovante */}
-                            <div className="mt-3">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    <i className="fa-solid fa-file-image mr-1"></i>Comprovante (opcional)
-                                </label>
-                                <input
-                                    type="file"
-                                    accept="image/jpeg,image/png,application/pdf"
-                                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                                />
-                                {receiptFile && (
-                                    <p className="text-xs text-green-600 mt-1">
-                                        <i className="fa-solid fa-check mr-1"></i>
-                                        {receiptFile.name}
-                                    </p>
-                                )}
-                                <p className="text-xs text-gray-500 mt-1">JPG, PNG ou PDF até 5MB</p>
-                            </div>
                         </>
                     )}
+
+                    {/* Upload de Comprovante - disponível para todos os métodos */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            <i className="fa-solid fa-file-image mr-1"></i>Comprovante (opcional)
+                        </label>
+                        <input
+                            type="file"
+                            accept="image/jpeg,image/png,application/pdf"
+                            onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                            className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                        />
+                        {receiptFile && (
+                            <p className="text-xs text-green-600 mt-1">
+                                <i className="fa-solid fa-check mr-1"></i>
+                                {receiptFile.name}
+                            </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">JPG, PNG ou PDF até 5MB</p>
+                    </div>
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
