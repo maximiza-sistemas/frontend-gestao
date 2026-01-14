@@ -204,6 +204,10 @@ class ApiService {
     return this.delete(`/users/${id}`);
   }
 
+  async resetUserPassword(id: number, newPassword: string) {
+    return this.put(`/users/${id}/reset-password`, { new_password: newPassword });
+  }
+
   async getActivityLogs(params?: any) {
     const queryString = params ? '?' + new URLSearchParams(params).toString() : '';
     return this.get(`/users/activity-logs${queryString}`);

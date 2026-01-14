@@ -45,10 +45,14 @@ interface UsersTabProps {
     onEditUser: (user: any) => void;
     onToggleUserStatus: (user: any) => void;
     onDeleteUser: (user: any) => void;
+    onResetPassword: (user: any, newPassword: string) => void;
 }
 
-const UsersTab: React.FC<UsersTabProps> = ({ users = [], onAddUser, onEditUser, onToggleUserStatus, onDeleteUser }) => {
+const UsersTab: React.FC<UsersTabProps> = ({ users = [], onAddUser, onEditUser, onToggleUserStatus, onDeleteUser, onResetPassword }) => {
     const [confirmModal, setConfirmModal] = useState<{ type: 'toggle' | 'delete'; user: any } | null>(null);
+    const [passwordModal, setPasswordModal] = useState<any>(null);
+    const [newPassword, setNewPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
 
     return (
         <>
@@ -93,6 +97,13 @@ const UsersTab: React.FC<UsersTabProps> = ({ users = [], onAddUser, onEditUser, 
                                                     className={`font-medium ${user.status === 'Ativo' ? 'text-orange-600' : 'text-green-600'} hover:underline text-xs`}
                                                 >
                                                     {user.status === 'Ativo' ? 'Desativar' : 'Ativar'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { setPasswordModal(user); setNewPassword(''); setPasswordError(''); }}
+                                                    className="font-medium text-purple-600 hover:underline text-xs"
+                                                    title="Redefinir Senha"
+                                                >
+                                                    <i className="fa-solid fa-key"></i>
                                                 </button>
                                                 <button
                                                     onClick={() => setConfirmModal({ type: 'delete', user })}
@@ -161,6 +172,55 @@ const UsersTab: React.FC<UsersTabProps> = ({ users = [], onAddUser, onEditUser, 
                                     ? (confirmModal.user.status === 'Ativo' ? 'Desativar' : 'Ativar')
                                     : 'Excluir'
                                 }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Redefinir Senha */}
+            {passwordModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+                        <h3 className="text-lg font-bold text-gray-800 mb-4">
+                            <i className="fa-solid fa-key mr-2 text-purple-600"></i>
+                            Redefinir Senha
+                        </h3>
+                        <p className="text-gray-600 mb-4">
+                            Definir nova senha para: <strong>{passwordModal.name}</strong>
+                        </p>
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nova Senha *</label>
+                            <input
+                                type="password"
+                                value={newPassword}
+                                onChange={(e) => { setNewPassword(e.target.value); setPasswordError(''); }}
+                                placeholder="Mínimo 6 caracteres"
+                                className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${passwordError ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-purple-500'
+                                    }`}
+                            />
+                            {passwordError && <p className="text-red-500 text-sm mt-1">{passwordError}</p>}
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => { setPasswordModal(null); setNewPassword(''); setPasswordError(''); }}
+                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => {
+                                    if (newPassword.length < 6) {
+                                        setPasswordError('Senha deve ter pelo menos 6 caracteres');
+                                        return;
+                                    }
+                                    onResetPassword(passwordModal, newPassword);
+                                    setPasswordModal(null);
+                                    setNewPassword('');
+                                }}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                            >
+                                Redefinir Senha
                             </button>
                         </div>
                     </div>
@@ -1080,6 +1140,24 @@ const Configuracoes: React.FC = () => {
         }
     };
 
+    const handleResetPassword = async (user: any, newPassword: string) => {
+        try {
+            setLoading(true);
+            await api.resetUserPassword(user.id, newPassword);
+            setMessage({ type: 'success', text: `Senha do usuário "${user.name}" redefinida com sucesso!` });
+            setTimeout(() => setMessage(null), 3000);
+        } catch (error: any) {
+            console.error('Erro ao redefinir senha:', error);
+            setMessage({
+                type: 'error',
+                text: error.response?.data?.error || 'Erro ao redefinir senha.'
+            });
+            setTimeout(() => setMessage(null), 5000);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleUpdateCompany = (data: { name: string; cnpj: string }) => {
         try {
             localStorage.setItem('companyInfo', JSON.stringify(data));
@@ -1212,6 +1290,7 @@ const Configuracoes: React.FC = () => {
                                 onEditUser={handleEditUser}
                                 onToggleUserStatus={handleToggleUserStatus}
                                 onDeleteUser={handleDeleteUser}
+                                onResetPassword={handleResetPassword}
                             />
                         )
                     )}
