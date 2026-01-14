@@ -78,19 +78,23 @@ const Precos: React.FC = () => {
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Último Preço Compra</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Data da Última Compra</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredProducts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={3} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
                                             Nenhum produto encontrado
                                         </td>
                                     </tr>
                                 ) : (
                                     filteredProducts.map((product) => {
                                         const priceBuy = parseFloat(product.price_buy || '0');
+                                        const lastPurchaseDate = product.last_purchase_date
+                                            ? new Date(product.last_purchase_date).toLocaleDateString('pt-BR')
+                                            : '-';
 
                                         return (
                                             <tr key={product.id} className="hover:bg-gray-50">
@@ -101,6 +105,11 @@ const Precos: React.FC = () => {
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                                     <span className="text-lg font-semibold text-blue-600">
                                                         R$ {priceBuy.toFixed(2)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    <span className={`text-sm ${product.last_purchase_date ? 'text-gray-700' : 'text-gray-400'}`}>
+                                                        {lastPurchaseDate}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
