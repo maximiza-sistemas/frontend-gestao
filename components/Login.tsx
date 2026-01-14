@@ -15,7 +15,7 @@ function CopaEnergiaLogo() {
             const y1 = 30 + Math.sin(angle) * 15;
             const x2 = 30 + Math.cos(angle) * 25;
             const y2 = 30 + Math.sin(angle) * 25;
-            
+
             return (
               <ellipse
                 key={i}
@@ -47,7 +47,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,7 +60,7 @@ export function Login() {
     try {
       const result = await login(email, password);
       console.log('📝 Resultado do login:', result);
-      
+
       if (!result.success) {
         console.error('❌ Login falhou:', result.error);
         setError(result.error || 'Erro no login');
@@ -154,34 +154,6 @@ export function Login() {
               </button>
             </div>
           </form>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-3 bg-white text-[#1a4d4a] font-medium">Credenciais de teste</span>
-              </div>
-            </div>
-
-            <div className="mt-4 bg-[#1a4d4a]/5 rounded-lg p-4">
-              <div className="text-sm text-[#1a4d4a] space-y-2">
-                <div className="flex justify-between">
-                  <span className="font-semibold text-[#f97316]">Admin:</span>
-                  <span className="text-xs">admin@sisgas.com / admin123</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold text-[#f97316]">Gerente:</span>
-                  <span className="text-xs">gerente@sisgas.com / gerente123</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="font-semibold text-[#f97316]">Vendedor:</span>
-                  <span className="text-xs">vendedor1@sisgas.com / vendedor123</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
