@@ -39,6 +39,10 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
     const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    const [selectedBank, setSelectedBank] = useState<string>('');
+
+    // Lista de bancos disponíveis
+    const BANKS = ['Nubank', 'Inter', 'Bradesco', 'Itaú', 'Caixa', 'Santander', 'Banco do Brasil', 'C6 Bank', 'PagBank', 'Sicoob', 'Outro'];
 
     // Estado para armazenar os dados atualizados do pedido
     const [savedDiscount, setSavedDiscount] = useState<number | null>(null);
@@ -83,6 +87,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                 setAmount(initialPending.toFixed(2));
             }
             setPaymentMethod('Dinheiro');
+            setSelectedBank('');
             setNotes('');
         }
     }, [isOpen, order?.id]);
@@ -144,9 +149,21 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             return;
         }
 
+        // Validar banco para métodos que exigem
+        const requiresBank = ['Pix', 'Transferência', 'Depósito'].includes(paymentMethod);
+        if (requiresBank && !selectedBank) {
+            alert('Selecione o banco para este método de pagamento!');
+            return;
+        }
+
         setLoading(true);
         try {
-            await onSave({ amount: numAmount, payment_method: paymentMethod, notes, payment_date: paymentDate });
+            // Incluir banco nas notas se selecionado
+            let paymentNotes = notes;
+            if (selectedBank) {
+                paymentNotes = `[${selectedBank}] ${notes}`.trim();
+            }
+            await onSave({ amount: numAmount, payment_method: paymentMethod, notes: paymentNotes, payment_date: paymentDate });
         } finally {
             setLoading(false);
         }
@@ -283,7 +300,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                 <button
                                     key={method}
                                     type="button"
-                                    onClick={() => setPaymentMethod(method)}
+                                    onClick={() => {
+                                        setPaymentMethod(method);
+                                        // Limpar banco se mudou para método que não precisa
+                                        if (!['Pix', 'Transferência', 'Depósito'].includes(method)) {
+                                            setSelectedBank('');
+                                        }
+                                    }}
                                     className={`p-2 border rounded-md text-sm font-medium transition-colors ${paymentMethod === method
                                         ? 'bg-green-600 text-white border-green-600'
                                         : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
@@ -299,6 +322,26 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                             ))}
                         </div>
                     </div>
+
+                    {/* Seleção de Banco para Pix, Transferência e Depósito */}
+                    {['Pix', 'Transferência', 'Depósito'].includes(paymentMethod) && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                <i className="fa-solid fa-building-columns mr-1"></i>Banco *
+                            </label>
+                            <select
+                                value={selectedBank}
+                                onChange={(e) => setSelectedBank(e.target.value)}
+                                className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                required
+                            >
+                                <option value="">Selecione o banco...</option>
+                                {BANKS.map((bank) => (
+                                    <option key={bank} value={bank}>{bank}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
