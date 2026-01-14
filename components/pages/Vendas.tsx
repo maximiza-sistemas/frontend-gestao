@@ -1200,8 +1200,8 @@ const OrderForm: React.FC<{
 
 
 const Vendas: React.FC = () => {
-    const { orders, loading, error, createOrder, updateOrder, updateOrderStatus, refetchOrders } = useOrders();
-    const [modalState, setModalState] = useState<'form' | 'details' | 'cancel' | 'reopen' | null>(null);
+    const { orders, loading, error, createOrder, updateOrder, updateOrderStatus, deleteOrder, refetchOrders } = useOrders();
+    const [modalState, setModalState] = useState<'form' | 'details' | 'cancel' | 'reopen' | 'delete' | null>(null);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
@@ -1222,7 +1222,7 @@ const Vendas: React.FC = () => {
         setShowToast(true);
     };
 
-    const handleOpenModal = (state: 'form' | 'details' | 'cancel' | 'reopen', order: Order | null) => {
+    const handleOpenModal = (state: 'form' | 'details' | 'cancel' | 'reopen' | 'delete', order: Order | null) => {
         setSelectedOrder(order);
         setModalState(state);
     };
@@ -1268,6 +1268,22 @@ const Vendas: React.FC = () => {
                 }
             } catch (error) {
                 showMessage('Erro de conexão ao cancelar pedido', 'error');
+            }
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (selectedOrder) {
+            try {
+                const result = await deleteOrder(selectedOrder.id);
+                if (result.success) {
+                    showMessage('Pedido excluído com sucesso', 'success');
+                    handleCloseModals();
+                } else {
+                    showMessage(result.error || 'Erro ao excluir pedido', 'error');
+                }
+            } catch (error) {
+                showMessage('Erro de conexão ao excluir pedido', 'error');
             }
         }
     };
@@ -1416,6 +1432,29 @@ const Vendas: React.FC = () => {
                 </div>
             </Modal>
 
+            <Modal
+                isOpen={modalState === 'delete' && !!selectedOrder}
+                onClose={handleCloseModals}
+                title="Confirmar Exclusão Permanente"
+            >
+                <div className="space-y-4">
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-lg">
+                        <p className="text-red-800 font-medium">
+                            <i className="fa-solid fa-triangle-exclamation mr-2"></i>
+                            Atenção: Esta ação é irreversível!
+                        </p>
+                    </div>
+                    <p>Tem certeza que deseja excluir permanentemente o pedido <strong>#{selectedOrder?.id}</strong>?</p>
+                    <p className="text-sm text-gray-600">Todos os pagamentos e dados associados serão perdidos.</p>
+                </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                    <Button variant="secondary" onClick={handleCloseModals}>Cancelar</Button>
+                    <Button variant="danger" onClick={handleConfirmDelete}>
+                        <i className="fa-solid fa-trash mr-2"></i>Excluir Permanentemente
+                    </Button>
+                </div>
+            </Modal>
+
             <div className="space-y-6">
                 <PageHeader title="Vendas & Pedidos" buttonLabel="Novo Pedido" onButtonClick={() => handleOpenModal('form', null)} />
 
@@ -1515,6 +1554,15 @@ const Vendas: React.FC = () => {
                                             ) : (
                                                 <button onClick={() => handleOpenModal('cancel', order)} className="font-medium text-red-600 hover:underline text-xs disabled:text-gray-400 disabled:no-underline" disabled={order.status === 'Entregue'}>
                                                     Cancelar
+                                                </button>
+                                            )}
+                                            {order.status === 'Pendente' && (
+                                                <button
+                                                    onClick={() => handleOpenModal('delete', order)}
+                                                    className="font-medium text-red-700 hover:underline text-xs"
+                                                    title="Excluir permanentemente"
+                                                >
+                                                    <i className="fa-solid fa-trash"></i>
                                                 </button>
                                             )}
                                         </div>
