@@ -477,36 +477,20 @@ const ContainerLoanFormModal: React.FC<ContainerLoanFormModalProps> = ({
                     </div>
                 </div>
 
-                {/* Datas */}
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Data do Empréstimo *
-                        </label>
-                        <input
-                            type="date"
-                            name="loan_date"
-                            value={formData.loan_date}
-                            onChange={handleChange}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${errors.loan_date ? 'border-red-500' : 'border-gray-300'
-                                }`}
-                        />
-                        {errors.loan_date && <p className="mt-1 text-sm text-red-600">{errors.loan_date}</p>}
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Previsão de Devolução
-                        </label>
-                        <input
-                            type="date"
-                            name="expected_return_date"
-                            value={formData.expected_return_date}
-                            onChange={handleChange}
-                            min={formData.loan_date}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        />
-                    </div>
+                {/* Data do Empréstimo */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Data do Empréstimo *
+                    </label>
+                    <input
+                        type="date"
+                        name="loan_date"
+                        value={formData.loan_date}
+                        onChange={handleChange}
+                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 ${errors.loan_date ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                    />
+                    {errors.loan_date && <p className="mt-1 text-sm text-red-600">{errors.loan_date}</p>}
                 </div>
 
                 {/* Observações */}

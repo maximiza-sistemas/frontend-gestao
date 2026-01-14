@@ -767,7 +767,7 @@ const EstoqueAPI: React.FC = () => {
       {activeTab === 'loans' && (
         <>
           {/* Cards de Resumo */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
@@ -800,18 +800,6 @@ const EstoqueAPI: React.FC = () => {
                 </div>
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
                   <i className="fa-solid fa-check text-green-600 text-xl"></i>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Atrasados</p>
-                  <p className="text-2xl font-bold text-red-600">{loanStats?.overdue_count || 0}</p>
-                </div>
-                <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                  <i className="fa-solid fa-exclamation-triangle text-red-600 text-xl"></i>
                 </div>
               </div>
             </div>
@@ -1107,14 +1095,6 @@ const EstoqueAPI: React.FC = () => {
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Data do Empréstimo</label>
                   <p className="text-gray-900">{new Date(viewingLoan.loan_date).toLocaleDateString('pt-BR')}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Previsão de Devolução</label>
-                  <p className="text-gray-900">
-                    {viewingLoan.expected_return_date
-                      ? new Date(viewingLoan.expected_return_date).toLocaleDateString('pt-BR')
-                      : '-'}
-                  </p>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Data de Devolução</label>
