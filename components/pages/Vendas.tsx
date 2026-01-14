@@ -433,13 +433,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                 <i className="fa-solid fa-history mr-2"></i>
                                 Histórico de Pagamentos ({paymentHistory.length})
                             </h4>
-                            <div className="max-h-32 overflow-y-auto">
+                            <div className="max-h-40 overflow-y-auto">
                                 <table className="min-w-full text-xs">
                                     <thead className="bg-blue-100">
                                         <tr>
                                             <th className="px-2 py-1 text-left">Data</th>
                                             <th className="px-2 py-1 text-right">Valor</th>
                                             <th className="px-2 py-1 text-left">Método</th>
+                                            <th className="px-2 py-1 text-center">Comprov.</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -452,6 +453,21 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                                     {Number(payment.amount).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                                 </td>
                                                 <td className="px-2 py-1">{payment.payment_method}</td>
+                                                <td className="px-2 py-1 text-center">
+                                                    {payment.receipt_file ? (
+                                                        <a
+                                                            href={api.getPaymentReceiptUrl(order.id, payment.id)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="text-blue-600 hover:text-blue-800"
+                                                            title="Ver comprovante"
+                                                        >
+                                                            <i className="fa-solid fa-file-image"></i>
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-gray-400">-</span>
+                                                    )}
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
