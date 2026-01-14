@@ -41,6 +41,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
     const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [selectedBank, setSelectedBank] = useState<string>('');
+    const [paymentTime, setPaymentTime] = useState<string>('');
 
     // Lista de bancos disponíveis
     const BANKS = ['Nubank', 'Inter', 'Bradesco', 'Itaú', 'Caixa', 'Santander', 'Banco do Brasil', 'C6 Bank', 'PagBank', 'Sicoob', 'Outro'];
@@ -90,6 +91,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             }
             setPaymentMethod('Dinheiro');
             setSelectedBank('');
+            setPaymentTime(new Date().toTimeString().slice(0, 5)); // HH:MM format
             setNotes('');
         }
     }, [isOpen, order?.id]);
@@ -165,10 +167,12 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
 
         setLoading(true);
         try {
-            // Incluir banco nas notas se selecionado
+            // Incluir banco e hora nas notas para pagamentos eletrônicos
             let paymentNotes = notes;
-            if (selectedBank) {
-                paymentNotes = `[${selectedBank}] ${notes}`.trim();
+            const requiresBankInfo = ['Pix', 'Transferência', 'Depósito'].includes(paymentMethod);
+            if (requiresBankInfo && selectedBank) {
+                const timeInfo = paymentTime ? ` às ${paymentTime}` : '';
+                paymentNotes = `[${selectedBank}${timeInfo}] ${notes}`.trim();
             }
             await onSave({ amount: numAmount, payment_method: paymentMethod, notes: paymentNotes, payment_date: paymentDate });
         } finally {
@@ -343,23 +347,36 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                         </div>
                     </div>
 
-                    {/* Seleção de Banco para Pix, Transferência e Depósito */}
+                    {/* Seleção de Banco e Hora para Pix, Transferência e Depósito */}
                     {['Pix', 'Transferência', 'Depósito'].includes(paymentMethod) && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                <i className="fa-solid fa-building-columns mr-1"></i>Banco *
-                            </label>
-                            <select
-                                value={selectedBank}
-                                onChange={(e) => setSelectedBank(e.target.value)}
-                                className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
-                                required
-                            >
-                                <option value="">Selecione o banco...</option>
-                                {BANKS.map((bank) => (
-                                    <option key={bank} value={bank}>{bank}</option>
-                                ))}
-                            </select>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <i className="fa-solid fa-building-columns mr-1"></i>Banco *
+                                </label>
+                                <select
+                                    value={selectedBank}
+                                    onChange={(e) => setSelectedBank(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                    required
+                                >
+                                    <option value="">Selecione o banco...</option>
+                                    {BANKS.map((bank) => (
+                                        <option key={bank} value={bank}>{bank}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    <i className="fa-solid fa-clock mr-1"></i>Hora
+                                </label>
+                                <input
+                                    type="time"
+                                    value={paymentTime}
+                                    onChange={(e) => setPaymentTime(e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                />
+                            </div>
                         </div>
                     )}
 
