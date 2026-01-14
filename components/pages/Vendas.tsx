@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { OrderStatus } from '../../types';
 import { Order, useOrders } from '../../hooks/useOrders';
 import { api } from '../../services/api';
@@ -122,12 +123,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                 const newDiscount = parseFloat(String(data.discount));
                 const newPendingAmount = parseFloat(String(data.pending_amount));
 
-                // Atualizar todos os estados de uma vez para forçar re-render
-                setEditingDiscount(false);
-                setSavedDiscount(newDiscount);
-                setSavedPendingAmount(newPendingAmount);
-                setDiscount(newDiscount.toFixed(2));
-                setAmount(newPendingAmount.toFixed(2));
+                // Usar flushSync para forçar atualização imediata do DOM
+                flushSync(() => {
+                    setEditingDiscount(false);
+                    setSavedDiscount(newDiscount);
+                    setSavedPendingAmount(newPendingAmount);
+                    setDiscount(newDiscount.toFixed(2));
+                    setAmount(newPendingAmount.toFixed(2));
+                });
 
                 if (onDiscountUpdate) {
                     onDiscountUpdate();
