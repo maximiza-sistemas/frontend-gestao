@@ -24,7 +24,7 @@ const getOrderStatusVariant = (status: OrderStatus) => {
 interface PaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSave: (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string }) => void;
+    onSave: (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string; receipt?: File }) => void;
     order: any;
     onDiscountUpdate?: () => void;
 }
@@ -42,6 +42,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [selectedBank, setSelectedBank] = useState<string>('');
     const [paymentTime, setPaymentTime] = useState<string>('');
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
 
     // Lista de bancos disponíveis
     const BANKS = ['Nubank', 'Inter', 'Bradesco', 'Itaú', 'Caixa', 'Santander', 'Banco do Brasil', 'C6 Bank', 'PagBank', 'Sicoob', 'Outro'];
@@ -92,6 +93,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             setPaymentMethod('Dinheiro');
             setSelectedBank('');
             setPaymentTime(''); // Hora deve ser inserida manualmente
+            setReceiptFile(null);
             setNotes('');
         }
     }, [isOpen, order?.id]);
@@ -174,7 +176,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                 const timeInfo = paymentTime ? ` às ${paymentTime}` : '';
                 paymentNotes = `[${selectedBank}${timeInfo}] ${notes}`.trim();
             }
-            await onSave({ amount: numAmount, payment_method: paymentMethod, notes: paymentNotes, payment_date: paymentDate });
+            await onSave({ amount: numAmount, payment_method: paymentMethod, notes: paymentNotes, payment_date: paymentDate, receipt: receiptFile || undefined });
         } finally {
             setLoading(false);
         }
@@ -349,35 +351,57 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
 
                     {/* Seleção de Banco e Hora para Pix, Transferência e Depósito */}
                     {['Pix', 'Transferência', 'Depósito'].includes(paymentMethod) && (
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    <i className="fa-solid fa-building-columns mr-1"></i>Banco *
-                                </label>
-                                <select
-                                    value={selectedBank}
-                                    onChange={(e) => setSelectedBank(e.target.value)}
-                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
-                                    required
-                                >
-                                    <option value="">Selecione o banco...</option>
-                                    {BANKS.map((bank) => (
-                                        <option key={bank} value={bank}>{bank}</option>
-                                    ))}
-                                </select>
+                        <>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <i className="fa-solid fa-building-columns mr-1"></i>Banco *
+                                    </label>
+                                    <select
+                                        value={selectedBank}
+                                        onChange={(e) => setSelectedBank(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                        required
+                                    >
+                                        <option value="">Selecione o banco...</option>
+                                        {BANKS.map((bank) => (
+                                            <option key={bank} value={bank}>{bank}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        <i className="fa-solid fa-clock mr-1"></i>Hora
+                                    </label>
+                                    <input
+                                        type="time"
+                                        value={paymentTime}
+                                        onChange={(e) => setPaymentTime(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                    />
+                                </div>
                             </div>
-                            <div>
+
+                            {/* Upload de Comprovante */}
+                            <div className="mt-3">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    <i className="fa-solid fa-clock mr-1"></i>Hora
+                                    <i className="fa-solid fa-file-image mr-1"></i>Comprovante (opcional)
                                 </label>
                                 <input
-                                    type="time"
-                                    value={paymentTime}
-                                    onChange={(e) => setPaymentTime(e.target.value)}
-                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500"
+                                    type="file"
+                                    accept="image/jpeg,image/png,application/pdf"
+                                    onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+                                    className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-green-500 focus:border-green-500 text-sm"
                                 />
+                                {receiptFile && (
+                                    <p className="text-xs text-green-600 mt-1">
+                                        <i className="fa-solid fa-check mr-1"></i>
+                                        {receiptFile.name}
+                                    </p>
+                                )}
+                                <p className="text-xs text-gray-500 mt-1">JPG, PNG ou PDF até 5MB</p>
                             </div>
-                        </div>
+                        </>
                     )}
 
                     <div>
