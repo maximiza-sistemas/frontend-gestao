@@ -43,8 +43,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         unit_price: '',
         quantity: '1',
         purchase_date: new Date().toISOString().split('T')[0],
-        is_installment: false,
-        installment_count: '1',
+        is_term: false, // A prazo
+        payment_date: '', // Data que o pagamento foi realizado (para compras a prazo)
         notes: ''
     });
 
@@ -106,8 +106,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 unit_price: Number(formData.unit_price),
                 quantity: Number(formData.quantity),
                 purchase_date: formData.purchase_date,
-                is_installment: formData.is_installment,
-                installment_count: formData.is_installment ? Number(formData.installment_count) : undefined,
+                is_term: formData.is_term,
+                payment_date: formData.is_term && formData.payment_date ? formData.payment_date : undefined,
                 notes: formData.notes || undefined
             });
 
@@ -117,8 +117,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                     unit_price: '',
                     quantity: '1',
                     purchase_date: new Date().toISOString().split('T')[0],
-                    is_installment: false,
-                    installment_count: '1',
+                    is_term: false,
+                    payment_date: '',
                     notes: ''
                 });
                 fetchPurchases();
@@ -289,28 +289,26 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                 <label className="flex items-center space-x-2 mb-2">
                                     <input
                                         type="checkbox"
-                                        checked={formData.is_installment}
-                                        onChange={e => setFormData({ ...formData, is_installment: e.target.checked })}
+                                        checked={formData.is_term}
+                                        onChange={e => setFormData({ ...formData, is_term: e.target.checked, payment_date: e.target.checked ? '' : '' })}
                                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                                     />
-                                    <span className="text-sm text-gray-700">Parcelado</span>
+                                    <span className="text-sm text-gray-700">A Prazo</span>
                                 </label>
                             </div>
                         </div>
 
-                        {formData.is_installment && (
+                        {formData.is_term && (
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Número de Parcelas</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
                                 <input
-                                    type="number"
-                                    min="2"
-                                    max="24"
+                                    type="date"
                                     className="w-full border rounded p-2"
-                                    value={formData.installment_count}
-                                    onChange={e => setFormData({ ...formData, installment_count: e.target.value })}
+                                    value={formData.payment_date}
+                                    onChange={e => setFormData({ ...formData, payment_date: e.target.value })}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    Valor por parcela: R$ {(calculatedTotal / Number(formData.installment_count || 1)).toFixed(2)}
+                                    {formData.payment_date ? 'Pagamento já realizado' : 'Deixe em branco se ainda não foi pago'}
                                 </p>
                             </div>
                         )}
@@ -375,13 +373,16 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                 R$ {purchase.total_amount.toFixed(2)}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                {purchase.is_installment ? (
-                                                    <span className={`px-2 py-1 text-xs rounded-full ${(purchase.pending_amount || 0) <= 0
-                                                            ? 'bg-green-100 text-green-800'
-                                                            : 'bg-yellow-100 text-yellow-800'
-                                                        }`}>
-                                                        {purchase.installment_count}x - {(purchase.pending_amount || 0) <= 0 ? 'Pago' : 'Pendente'}
-                                                    </span>
+                                                {(purchase as any).is_term ? (
+                                                    (purchase as any).payment_date ? (
+                                                        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                                            Pago em {new Date((purchase as any).payment_date).toLocaleDateString('pt-BR')}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                                            A Prazo - Pendente
+                                                        </span>
+                                                    )
                                                 ) : (
                                                     <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
                                                         À Vista
@@ -389,15 +390,6 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                {purchase.is_installment && (
-                                                    <button
-                                                        onClick={() => handleViewInstallments(purchase)}
-                                                        className="text-blue-600 hover:text-blue-800 mr-3"
-                                                        title="Ver Parcelas"
-                                                    >
-                                                        <i className="fa-solid fa-list"></i>
-                                                    </button>
-                                                )}
                                                 <button
                                                     onClick={() => handleDelete(purchase.id)}
                                                     className="text-red-600 hover:text-red-800"
@@ -445,8 +437,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                             <td className="px-3 py-2 text-sm text-right">R$ {inst.amount.toFixed(2)}</td>
                                             <td className="px-3 py-2 text-center">
                                                 <span className={`px-2 py-1 text-xs rounded-full ${inst.status === 'Pago' ? 'bg-green-100 text-green-800' :
-                                                        inst.status === 'Vencido' ? 'bg-red-100 text-red-800' :
-                                                            'bg-yellow-100 text-yellow-800'
+                                                    inst.status === 'Vencido' ? 'bg-red-100 text-red-800' :
+                                                        'bg-yellow-100 text-yellow-800'
                                                     }`}>
                                                     {inst.status}
                                                 </span>

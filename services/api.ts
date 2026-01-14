@@ -327,8 +327,8 @@ class ApiService {
     unit_price: number;
     quantity: number;
     purchase_date?: string;
-    is_installment?: boolean;
-    installment_count?: number;
+    is_term?: boolean;
+    payment_date?: string;
     notes?: string;
   }) {
     return this.post(`/products/${productId}/purchases`, data);
