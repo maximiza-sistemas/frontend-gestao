@@ -66,10 +66,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
     const orderTotal = Number(order?.totalValue ?? order?.total_value ?? 0);
     // Usar o desconto salvo localmente se disponível, senão usar o do order
     const currentDiscount = savedDiscount !== null ? savedDiscount : Number(order?.discount ?? 0);
-    const appliedDiscount = editingDiscount ? parseFloat(discount) || 0 : currentDiscount;
-    const totalWithDiscount = orderTotal - appliedDiscount;
+    // Quando editando, mostrar preview do desconto; senão usar o desconto atual salvo
+    const displayDiscount = editingDiscount ? (parseFloat(discount) || 0) : currentDiscount;
+    const totalWithDiscount = orderTotal - displayDiscount;
     const paidAmount = Number(order?.paid_amount ?? 0);
-    // Usar o pending_amount salvo localmente se disponível
+    // Usar o pending_amount salvo localmente se disponível, senão calcular
     const pendingAmount = savedPendingAmount !== null
         ? savedPendingAmount
         : Math.max(0, totalWithDiscount - paidAmount);
@@ -120,11 +121,14 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                 const data = response.data as { discount: string | number; pending_amount: string | number };
                 const newDiscount = parseFloat(String(data.discount));
                 const newPendingAmount = parseFloat(String(data.pending_amount));
+
+                // Atualizar todos os estados de uma vez para forçar re-render
+                setEditingDiscount(false);
                 setSavedDiscount(newDiscount);
                 setSavedPendingAmount(newPendingAmount);
                 setDiscount(newDiscount.toFixed(2));
-                setEditingDiscount(false);
                 setAmount(newPendingAmount.toFixed(2));
+
                 if (onDiscountUpdate) {
                     onDiscountUpdate();
                 }
