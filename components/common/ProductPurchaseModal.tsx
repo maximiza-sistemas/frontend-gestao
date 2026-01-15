@@ -45,6 +45,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     const [purchases, setPurchases] = useState<ProductPurchase[]>([]);
     const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
 
     // Form state
@@ -121,8 +122,9 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!product) return;
+        if (!product || submitting) return;
 
+        setSubmitting(true);
         try {
             const response = await api.createProductPurchase(product.id, {
                 unit_price: Number(formData.unit_price),
@@ -153,6 +155,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         } catch (error) {
             console.error('Erro ao registrar compra:', error);
             showMessage('Erro ao registrar compra', 'error');
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -367,10 +371,23 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
 
                         <button
                             type="submit"
-                            className="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 flex items-center justify-center"
+                            disabled={submitting}
+                            className={`w-full px-4 py-2 rounded flex items-center justify-center ${submitting
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : 'bg-blue-600 hover:bg-blue-700'
+                                } text-white`}
                         >
-                            <i className="fa-solid fa-check mr-2"></i>
-                            Registrar Compra
+                            {submitting ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                                    Registrando...
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-check mr-2"></i>
+                                    Registrar Compra
+                                </>
+                            )}
                         </button>
                     </form>
                 )}
