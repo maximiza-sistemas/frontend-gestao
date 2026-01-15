@@ -5,6 +5,8 @@ import Toast from './Toast';
 interface ProductPurchase {
     id: number;
     product_id: number;
+    location_id?: number | null;
+    location_name?: string;
     unit_price: number;
     quantity: number;
     total_amount: number;
@@ -33,8 +35,15 @@ interface ProductPurchaseModalProps {
     product: { id: number; name: string } | null;
 }
 
+interface Location {
+    id: number;
+    name: string;
+    status?: string;
+}
+
 const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onClose, product }) => {
     const [purchases, setPurchases] = useState<ProductPurchase[]>([]);
+    const [locations, setLocations] = useState<Location[]>([]);
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
 
@@ -45,6 +54,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         purchase_date: new Date().toISOString().split('T')[0],
         is_term: false, // A prazo
         payment_date: '', // Data que o pagamento foi realizado (para compras a prazo)
+        location_id: '', // Empresa que realizou a compra
         notes: ''
     });
 
@@ -75,8 +85,20 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     useEffect(() => {
         if (isOpen && product) {
             fetchPurchases();
+            fetchLocations();
         }
     }, [isOpen, product]);
+
+    const fetchLocations = async () => {
+        try {
+            const response = await api.getLocations();
+            if (response.success && Array.isArray(response.data)) {
+                setLocations(response.data.filter((loc: Location) => loc.status === 'Ativo'));
+            }
+        } catch (error) {
+            console.error('Erro ao buscar empresas:', error);
+        }
+    };
 
     const fetchPurchases = async () => {
         if (!product) return;
@@ -108,6 +130,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 purchase_date: formData.purchase_date,
                 is_term: formData.is_term,
                 payment_date: formData.is_term && formData.payment_date ? formData.payment_date : undefined,
+                location_id: formData.location_id ? Number(formData.location_id) : undefined,
                 notes: formData.notes || undefined
             });
 
@@ -119,6 +142,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                     purchase_date: new Date().toISOString().split('T')[0],
                     is_term: false,
                     payment_date: '',
+                    location_id: '',
                     notes: ''
                 });
                 fetchPurchases();
@@ -285,17 +309,34 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                     onChange={e => setFormData({ ...formData, purchase_date: e.target.value })}
                                 />
                             </div>
-                            <div className="flex items-end">
-                                <label className="flex items-center space-x-2 mb-2">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.is_term}
-                                        onChange={e => setFormData({ ...formData, is_term: e.target.checked, payment_date: e.target.checked ? '' : '' })}
-                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span className="text-sm text-gray-700">A Prazo</span>
-                                </label>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Empresa *</label>
+                                <select
+                                    required
+                                    className="w-full border rounded p-2"
+                                    value={formData.location_id}
+                                    onChange={e => setFormData({ ...formData, location_id: e.target.value })}
+                                >
+                                    <option value="">Selecione a empresa...</option>
+                                    {locations.map(location => (
+                                        <option key={location.id} value={location.id}>
+                                            {location.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
+                        </div>
+
+                        <div className="flex items-center">
+                            <label className="flex items-center space-x-2">
+                                <input
+                                    type="checkbox"
+                                    checked={formData.is_term}
+                                    onChange={e => setFormData({ ...formData, is_term: e.target.checked, payment_date: e.target.checked ? '' : '' })}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-700">A Prazo</span>
+                            </label>
                         </div>
 
                         {formData.is_term && (
@@ -350,6 +391,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                 <thead className="bg-gray-50">
                                     <tr>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
                                         <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
@@ -362,6 +404,9 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                         <tr key={purchase.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3 whitespace-nowrap text-sm">
                                                 {new Date(purchase.purchase_date).toLocaleDateString('pt-BR')}
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                                {purchase.location_name || '-'}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
                                                 R$ {purchase.unit_price.toFixed(2)}
