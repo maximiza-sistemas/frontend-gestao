@@ -350,7 +350,7 @@ const Financeiro: React.FC = () => {
                 api.getFinancialCategories(),
                 api.getFinancialAccounts(),
                 api.getCashFlow(cashFlowStart, cashFlowEnd),
-                api.getClients(),
+                api.getClients({ limit: 200 }),
                 api.getSuppliers()
             ]);
 

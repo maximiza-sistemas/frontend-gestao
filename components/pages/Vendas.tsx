@@ -784,7 +784,7 @@ const OrderForm: React.FC<{
         const fetchData = async () => {
             try {
                 const [clientsRes, productsRes] = await Promise.all([
-                    api.getClients({ status: 'Ativo' }),
+                    api.getClients({ status: 'Ativo', limit: 200 }),
                     api.getProducts({ status: 'Ativo' })
                 ]);
 

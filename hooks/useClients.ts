@@ -32,7 +32,7 @@ export const useClients = () => {
       setLoading(true);
       setError(null);
       const response = await api.getClients(params);
-      
+
       if (response.success) {
         setClients(response.data || []);
       } else {
@@ -48,7 +48,7 @@ export const useClients = () => {
   const createClient = async (clientData: Partial<Client>) => {
     try {
       const response = await api.createClient(clientData);
-      
+
       if (response.success) {
         // Recarregar lista
         await fetchClients();
@@ -64,7 +64,7 @@ export const useClients = () => {
   const updateClient = async (id: number, clientData: Partial<Client>) => {
     try {
       const response = await api.updateClient(id, clientData);
-      
+
       if (response.success) {
         // Recarregar lista
         await fetchClients();
@@ -80,7 +80,7 @@ export const useClients = () => {
   const deleteClient = async (id: number) => {
     try {
       const response = await api.deleteClient(id);
-      
+
       if (response.success) {
         // Recarregar lista
         await fetchClients();
@@ -94,7 +94,7 @@ export const useClients = () => {
   };
 
   useEffect(() => {
-    fetchClients();
+    fetchClients({ limit: 200 });
   }, []);
 
   return {

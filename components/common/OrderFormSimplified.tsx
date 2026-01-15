@@ -75,7 +75,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
         const fetchData = async () => {
             try {
                 const [clientsRes, productsRes] = await Promise.all([
-                    api.getClients({ status: 'Ativo' }),
+                    api.getClients({ status: 'Ativo', limit: 200 }),
                     api.getProducts({ status: 'Ativo' })
                 ]);
                 if (clientsRes.success) setClients(clientsRes.data || []);
