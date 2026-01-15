@@ -93,8 +93,17 @@ const Precos: React.FC = () => {
                                 ) : (
                                     filteredProducts.map((product) => {
                                         const priceBuy = parseFloat(product.price_buy || '0');
+                                        // Formatar data sem usar new Date() para evitar problema de timezone
+                                        const formatDate = (dateStr: string) => {
+                                            if (!dateStr) return '-';
+                                            const parts = dateStr.split('T')[0].split('-');
+                                            if (parts.length === 3) {
+                                                return `${parts[2]}/${parts[1]}/${parts[0]}`;
+                                            }
+                                            return dateStr;
+                                        };
                                         const lastPurchaseDate = product.last_purchase_date
-                                            ? new Date(product.last_purchase_date).toLocaleDateString('pt-BR')
+                                            ? formatDate(product.last_purchase_date)
                                             : '-';
 
                                         return (

@@ -56,6 +56,19 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         return `${year}-${month}-${day}`;
     };
 
+    // Helper para formatar data de YYYY-MM-DD para DD/MM/YYYY (sem usar new Date para evitar timezone)
+    const formatDateString = (dateStr: string | null | undefined): string => {
+        if (!dateStr) return '-';
+        // Se a data já vier no formato DD/MM/YYYY, retorna como está
+        if (dateStr.includes('/')) return dateStr;
+        // Converte YYYY-MM-DD para DD/MM/YYYY
+        const parts = dateStr.split('T')[0].split('-');
+        if (parts.length === 3) {
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+        return dateStr;
+    };
+
     const [formData, setFormData] = useState({
         unit_price: '',
         quantity: '1',
@@ -429,7 +442,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                     {purchases.map((purchase) => (
                                         <tr key={purchase.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                {new Date(purchase.purchase_date).toLocaleDateString('pt-BR')}
+                                                {formatDateString(purchase.purchase_date)}
                                             </td>
                                             <td className="px-4 py-3 whitespace-nowrap text-sm">
                                                 {purchase.location_name || '-'}
@@ -447,7 +460,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                 {(purchase as any).is_term ? (
                                                     (purchase as any).payment_date ? (
                                                         <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                            Pago em {new Date((purchase as any).payment_date).toLocaleDateString('pt-BR')}
+                                                            Pago em {formatDateString((purchase as any).payment_date)}
                                                         </span>
                                                     ) : (
                                                         <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
@@ -483,7 +496,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                         <div className="bg-white rounded-lg p-6 w-full max-w-lg">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="text-lg font-bold">
-                                    Parcelas - Compra de {new Date(selectedPurchase.purchase_date).toLocaleDateString('pt-BR')}
+                                    Parcelas - Compra de {formatDateString(selectedPurchase.purchase_date)}
                                 </h3>
                                 <button onClick={() => setShowInstallments(false)} className="text-gray-500 hover:text-gray-700">
                                     <i className="fa-solid fa-times"></i>
@@ -504,7 +517,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                     {installments.map((inst) => (
                                         <tr key={inst.id}>
                                             <td className="px-3 py-2 text-sm">{inst.installment_number}/{selectedPurchase.installment_count}</td>
-                                            <td className="px-3 py-2 text-sm">{new Date(inst.due_date).toLocaleDateString('pt-BR')}</td>
+                                            <td className="px-3 py-2 text-sm">{formatDateString(inst.due_date)}</td>
                                             <td className="px-3 py-2 text-sm text-right">R$ {inst.amount.toFixed(2)}</td>
                                             <td className="px-3 py-2 text-center">
                                                 <span className={`px-2 py-1 text-xs rounded-full ${inst.status === 'Pago' ? 'bg-green-100 text-green-800' :
@@ -525,7 +538,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                 )}
                                                 {inst.status === 'Pago' && inst.paid_date && (
                                                     <span className="text-xs text-gray-500">
-                                                        {new Date(inst.paid_date).toLocaleDateString('pt-BR')}
+                                                        {formatDateString(inst.paid_date)}
                                                     </span>
                                                 )}
                                             </td>
