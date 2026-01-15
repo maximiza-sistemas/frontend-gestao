@@ -78,6 +78,7 @@ const Precos: React.FC = () => {
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produto</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Último Preço Compra</th>
+                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Empresa</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Data da Última Compra</th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
                                 </tr>
@@ -85,7 +86,7 @@ const Precos: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredProducts.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="px-6 py-12 text-center text-gray-500">
+                                        <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                                             Nenhum produto encontrado
                                         </td>
                                     </tr>
@@ -105,6 +106,11 @@ const Precos: React.FC = () => {
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
                                                     <span className="text-lg font-semibold text-blue-600">
                                                         R$ {priceBuy.toFixed(2)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                    <span className={`text-sm ${product.last_purchase_location ? 'text-gray-700' : 'text-gray-400'}`}>
+                                                        {product.last_purchase_location || '-'}
                                                     </span>
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-center">
