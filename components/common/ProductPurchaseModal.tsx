@@ -311,6 +311,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                     className="w-full border rounded p-2"
                                     value={formData.purchase_date}
                                     onChange={e => setFormData({ ...formData, purchase_date: e.target.value })}
+                                    onWheel={(e) => e.currentTarget.blur()}
                                 />
                             </div>
                             <div>
@@ -351,6 +352,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                     className="w-full border rounded p-2"
                                     value={formData.payment_date}
                                     onChange={e => setFormData({ ...formData, payment_date: e.target.value })}
+                                    onWheel={(e) => e.currentTarget.blur()}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
                                     {formData.payment_date ? 'Pagamento já realizado' : 'Deixe em branco se ainda não foi pago'}
@@ -373,8 +375,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                             type="submit"
                             disabled={submitting}
                             className={`w-full px-4 py-2 rounded flex items-center justify-center ${submitting
-                                    ? 'bg-gray-400 cursor-not-allowed'
-                                    : 'bg-blue-600 hover:bg-blue-700'
+                                ? 'bg-gray-400 cursor-not-allowed'
+                                : 'bg-blue-600 hover:bg-blue-700'
                                 } text-white`}
                         >
                             {submitting ? (
