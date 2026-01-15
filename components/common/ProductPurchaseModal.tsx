@@ -48,11 +48,18 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     const [submitting, setSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
 
-    // Form state
+    // Helper para obter data local no formato YYYY-MM-DD (evita problemas de timezone)
+    const getLocalDateString = (date: Date = new Date()) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const [formData, setFormData] = useState({
         unit_price: '',
         quantity: '1',
-        purchase_date: new Date().toISOString().split('T')[0],
+        purchase_date: getLocalDateString(),
         is_term: false, // A prazo
         payment_date: '', // Data que o pagamento foi realizado (para compras a prazo)
         location_id: '', // Empresa que realizou a compra
@@ -68,7 +75,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     const [paymentForm, setPaymentForm] = useState({
         installmentId: 0,
         paid_amount: '',
-        paid_date: new Date().toISOString().split('T')[0]
+        paid_date: getLocalDateString()
     });
     const [showPaymentForm, setShowPaymentForm] = useState(false);
 
@@ -141,7 +148,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 setFormData({
                     unit_price: '',
                     quantity: '1',
-                    purchase_date: new Date().toISOString().split('T')[0],
+                    purchase_date: getLocalDateString(),
                     is_term: false,
                     payment_date: '',
                     location_id: '',
@@ -179,7 +186,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         setPaymentForm({
             installmentId: installment.id,
             paid_amount: installment.amount.toString(),
-            paid_date: new Date().toISOString().split('T')[0]
+            paid_date: getLocalDateString()
         });
         setShowPaymentForm(true);
     };
