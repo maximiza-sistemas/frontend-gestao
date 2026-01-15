@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import Button from './Button';
+import { api } from '../../services/api';
 
 interface ProductFormData {
   name: string;
   description: string;
   weight_kg: string;
   status: string;
+  // Localização (filial) onde o produto será cadastrado
+  location_id?: string;
   // Campos de estoque inicial (apenas para criação)
   initial_full_quantity?: string;
   initial_empty_quantity?: string;
@@ -33,6 +36,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
     description: '',
     weight_kg: '',
     status: 'Ativo',
+    location_id: '',
     initial_full_quantity: '0',
     initial_empty_quantity: '0',
     initial_maintenance_quantity: '0'
@@ -41,6 +45,31 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
   const [errors, setErrors] = useState<Partial<ProductFormData>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [locations, setLocations] = useState<{ id: number, name: string }[]>([]);
+
+  // Buscar localizações disponíveis
+  useEffect(() => {
+    const fetchLocations = async () => {
+      try {
+        const response = await api.getStock();
+        if (response.success && response.data) {
+          const uniqueLocations = Array.from(
+            new Map((response.data as any[]).map((item: any) => [item.location_id, { id: item.location_id, name: item.location_name }])).values()
+          );
+          setLocations(uniqueLocations);
+          // Definir primeira localização como padrão se houver
+          if (uniqueLocations.length > 0 && !formData.location_id) {
+            setFormData(prev => ({ ...prev, location_id: uniqueLocations[0].id.toString() }));
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar localizações:', error);
+      }
+    };
+    if (isOpen && mode === 'create') {
+      fetchLocations();
+    }
+  }, [isOpen, mode]);
 
   useEffect(() => {
     if (initialData && mode === 'edit') {
@@ -56,6 +85,7 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
         description: '',
         weight_kg: '',
         status: 'Ativo',
+        location_id: locations.length > 0 ? locations[0].id.toString() : '',
         initial_full_quantity: '0',
         initial_empty_quantity: '0',
         initial_maintenance_quantity: '0'
@@ -178,10 +208,32 @@ const ProductFormModal: React.FC<ProductFormModalProps> = ({
                   <i className="fa-solid fa-boxes-stacked mr-2 text-orange-600"></i>
                   Configuração de Estoque Inicial
                 </h3>
-                <p className="text-xs text-gray-600 mt-1">Defina as quantidades iniciais e níveis de estoque para este produto</p>
+                <p className="text-xs text-gray-600 mt-1">Selecione a filial e defina as quantidades iniciais</p>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              {/* Seleção de Localização/Filial */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Filial *
+                </label>
+                <select
+                  name="location_id"
+                  value={formData.location_id}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  {locations.length === 0 ? (
+                    <option value="">Carregando localizações...</option>
+                  ) : (
+                    locations.map(location => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">O produto será cadastrado apenas nesta filial</p>
+              </div>              <div className="grid grid-cols-3 gap-4">
                 {/* Botijões Cheios */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
