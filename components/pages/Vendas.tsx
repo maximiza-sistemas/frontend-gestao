@@ -21,6 +21,16 @@ const getOrderStatusVariant = (status: OrderStatus) => {
     return map[status] as 'success' | 'info' | 'warning' | 'danger';
 };
 
+// Helper para formatar datas de string YYYY-MM-DD para DD/MM/YYYY (evita problemas de timezone)
+const formatDisplayDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '-';
+    // Se já estiver no formato ISO completo, pegar só a parte da data
+    const datePart = dateStr.split('T')[0];
+    const [year, month, day] = datePart.split('-');
+    if (!year || !month || !day) return dateStr;
+    return `${day}/${month}/${year}`;
+};
+
 interface PaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -1493,7 +1503,7 @@ const Vendas: React.FC = () => {
                                 <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-900 sticky left-0 bg-white z-10">#{order.id}</td>
                                     <td className="px-6 py-4 whitespace-nowrap sticky left-[100px] bg-white z-10 font-medium">{order.clientName}</td>
-                                    <td className="px-6 py-4">{new Date(order.date).toLocaleDateString('pt-BR')}</td>
+                                    <td className="px-6 py-4">{formatDisplayDate(order.date)}</td>
                                     <td className="px-6 py-4 text-right">{order.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                                     <td className="px-6 py-4 text-right">
                                         <span className={`font-medium ${(order.discount || 0) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
