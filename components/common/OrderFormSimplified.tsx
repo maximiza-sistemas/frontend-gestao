@@ -35,7 +35,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
 
     // Produto selecionado
     const [productId, setProductId] = useState('');
-    const [quantidade, setQuantidade] = useState(1);
+    const [quantidade, setQuantidade] = useState('1');
     const [valorUnitario, setValorUnitario] = useState('');
 
     // Despesas
@@ -89,7 +89,8 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
 
     // Calcular valores (Quantidade × Valor Unitário - Despesas)
     const valorUnitarioNum = parseFloat(valorUnitario) || 0;
-    const valorBruto = quantidade * valorUnitarioNum; // Valor a receber
+    const quantidadeNum = parseInt(quantidade) || 0;
+    const valorBruto = quantidadeNum * valorUnitarioNum; // Valor a receber
     const despesasNumerico = parseFloat(despesas) || 0;
     const valorLiquido = valorBruto - despesasNumerico; // Lucro líquido
 
@@ -104,6 +105,11 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
 
         if (!productId) {
             alert('Selecione um produto!');
+            return;
+        }
+
+        if (quantidadeNum <= 0) {
+            alert('Informe a quantidade!');
             return;
         }
 
@@ -201,7 +207,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                 (valorBruto - (houveEntrada ? (parseFloat(valorEntrada) || 0) : 0)) : 0,
             items: [{
                 product_id: Number(productId),
-                quantity: quantidade,
+                quantity: quantidadeNum,
                 unit_price: valorUnitarioNum
             }],
             notes: observacoes,
@@ -297,7 +303,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                             type="number"
                             min="1"
                             value={quantidade}
-                            onChange={e => setQuantidade(parseInt(e.target.value) || 1)}
+                            onChange={e => setQuantidade(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
                             required
                         />
@@ -321,7 +327,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                 </div>
 
                 {/* Subtotal calculado */}
-                {valorUnitarioNum > 0 && quantidade > 0 && (
+                {valorUnitarioNum > 0 && quantidadeNum > 0 && (
                     <div className="mt-3 p-3 bg-blue-50 rounded-md">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-blue-700">Cálculo:</span>
@@ -356,7 +362,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                     <h4 className="text-sm font-semibold text-gray-700 mb-3">📊 Resumo Financeiro</h4>
                     <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                            <span className="text-gray-700">💰 Valor do Pedido ({quantidade} un):</span>
+                            <span className="text-gray-700">💰 Valor do Pedido ({quantidadeNum} un):</span>
                             <span className="font-medium text-green-600">+ R$ {valorBruto.toFixed(2)}</span>
                         </div>
                         {despesasNumerico > 0 && (
