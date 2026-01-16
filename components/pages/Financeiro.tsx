@@ -64,7 +64,16 @@ interface FinancialAccount {
 }
 
 const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const formatDate = (date: string) => new Date(date).toLocaleDateString('pt-BR');
+const formatDate = (date: string) => {
+    if (!date) return '-';
+    // Se a data está no formato YYYY-MM-DD, formatar diretamente para evitar shift de timezone
+    if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
+        const [datePart] = date.split('T');
+        const [year, month, day] = datePart.split('-');
+        return `${day}/${month}/${year}`;
+    }
+    return new Date(date).toLocaleDateString('pt-BR');
+};
 
 const KPICard: React.FC<{ title: string; value: string; icon: string; color: string }> = ({ title, value, icon, color }) => (
     <div className="bg-white p-6 rounded-lg shadow-sm flex items-center">
