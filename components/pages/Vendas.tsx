@@ -1404,7 +1404,7 @@ const Vendas: React.FC = () => {
                 title={selectedOrder ? 'Editar Pedido' : 'Novo Pedido'}
                 size="lg"
             >
-                <OrderFormSimplified onClose={handleCloseModals} onSave={handleSaveOrder} />
+                <OrderFormSimplified onClose={handleCloseModals} onSave={handleSaveOrder} orderToEdit={selectedOrder} />
             </Modal>
 
             <Modal
@@ -1649,8 +1649,8 @@ const Vendas: React.FC = () => {
                                                 key={pageNum}
                                                 onClick={() => setPage(pageNum)}
                                                 className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-20 ${pagination.page === pageNum
-                                                        ? 'z-10 bg-orange-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600'
-                                                        : 'text-gray-900 hover:bg-gray-50'
+                                                    ? 'z-10 bg-orange-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600'
+                                                    : 'text-gray-900 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 {pageNum}

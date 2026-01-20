@@ -24,9 +24,10 @@ type MetodoCombinado = 'Dinheiro + Pix' | 'Dinheiro + Transferência' | 'Pix + T
 interface OrderFormSimplifiedProps {
     onSave: (order: any) => void;
     onClose: () => void;
+    orderToEdit?: any; // Pedido a ser editado (opcional)
 }
 
-const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClose }) => {
+const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClose, orderToEdit }) => {
     // Dados básicos
     const [clients, setClients] = useState<any[]>([]);
     const [products, setProducts] = useState<any[]>([]);
@@ -86,6 +87,54 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
         };
         fetchData();
     }, []);
+
+    // Carregar dados do pedido para edição
+    useEffect(() => {
+        const loadOrderData = async () => {
+            if (!orderToEdit) return;
+
+            // Carregar dados básicos
+            setClientId(orderToEdit.client_id?.toString() || orderToEdit.clientId?.toString() || '');
+
+            // Formatar data (remover parte do tempo se existir)
+            const orderDate = orderToEdit.order_date || orderToEdit.date || '';
+            const datePart = typeof orderDate === 'string' ? orderDate.split('T')[0] : '';
+            setDate(datePart || new Date().toISOString().split('T')[0]);
+
+            setObservacoes(orderToEdit.notes || '');
+            setDespesas((orderToEdit.expenses || 0).toString());
+
+            // Carregar itens do pedido
+            try {
+                const orderDetails = await api.getOrderById(orderToEdit.id);
+                if (orderDetails.success && orderDetails.data) {
+                    const data = orderDetails.data as { items?: any[] };
+                    const items = data.items || [];
+                    if (items.length > 0) {
+                        const firstItem = items[0];
+                        setProductId(firstItem.product_id?.toString() || '');
+                        setQuantidade(firstItem.quantity?.toString() || '1');
+                        setValorUnitario(firstItem.unit_price?.toString() || '');
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao carregar detalhes do pedido:', error);
+            }
+
+            // Carregar informações de pagamento
+            const paymentMethod = orderToEdit.payment_method || orderToEdit.paymentMethod;
+            if (paymentMethod === 'Prazo') {
+                setTipoPagamento('a_prazo');
+            } else if (paymentMethod === 'Misto') {
+                setTipoPagamento('a_vista_combinado');
+            } else if (paymentMethod) {
+                setTipoPagamento('a_vista');
+                setMetodoPagamento(paymentMethod as any);
+            }
+        };
+
+        loadOrderData();
+    }, [orderToEdit]);
 
     // Calcular valores (Quantidade × Valor Unitário - Despesas)
     const valorUnitarioNum = parseFloat(valorUnitario) || 0;
