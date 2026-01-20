@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../services/api';
 
 export interface Order {
@@ -16,21 +16,54 @@ export interface Order {
   dueDate?: string;
   created_at?: string;
   updated_at?: string;
+  discount?: number;
+  paid_amount?: number;
+  pending_amount?: number;
+  expenses?: number;
 }
 
-export const useOrders = () => {
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export const useOrders = (initialPage = 1, initialLimit = 20) => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: initialPage,
+    limit: initialLimit,
+    total: 0,
+    totalPages: 0
+  });
 
-  const fetchOrders = async (params?: any) => {
+  const fetchOrders = useCallback(async (params?: any) => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.getOrders(params);
+
+      // Merge pagination params with any additional params
+      const queryParams = {
+        page: pagination.page,
+        limit: pagination.limit,
+        ...params
+      };
+
+      const response = await api.getOrders(queryParams);
 
       if (response.success) {
         setOrders(response.data || []);
+        // Update pagination info from response
+        if (response.pagination) {
+          setPagination(prev => ({
+            ...prev,
+            total: response.pagination.total,
+            totalPages: response.pagination.totalPages
+          }));
+        }
       } else {
         setError(response.error || 'Erro ao carregar pedidos');
       }
@@ -39,7 +72,27 @@ export const useOrders = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [pagination.page, pagination.limit]);
+
+  const setPage = useCallback((page: number) => {
+    setPagination(prev => ({ ...prev, page }));
+  }, []);
+
+  const setLimit = useCallback((limit: number) => {
+    setPagination(prev => ({ ...prev, page: 1, limit }));
+  }, []);
+
+  const goToNextPage = useCallback(() => {
+    if (pagination.page < pagination.totalPages) {
+      setPagination(prev => ({ ...prev, page: prev.page + 1 }));
+    }
+  }, [pagination.page, pagination.totalPages]);
+
+  const goToPreviousPage = useCallback(() => {
+    if (pagination.page > 1) {
+      setPagination(prev => ({ ...prev, page: prev.page - 1 }));
+    }
+  }, [pagination.page]);
 
   const createOrder = async (orderData: Omit<Order, 'id'>) => {
     try {
@@ -101,14 +154,20 @@ export const useOrders = () => {
     }
   };
 
+  // Fetch orders when pagination changes
   useEffect(() => {
     fetchOrders();
-  }, []);
+  }, [pagination.page, pagination.limit]);
 
   return {
     orders,
     loading,
     error,
+    pagination,
+    setPage,
+    setLimit,
+    goToNextPage,
+    goToPreviousPage,
     fetchOrders,
     createOrder,
     updateOrder,

@@ -1210,7 +1210,7 @@ const OrderForm: React.FC<{
 
 
 const Vendas: React.FC = () => {
-    const { orders, loading, error, createOrder, updateOrder, updateOrderStatus, deleteOrder, refetchOrders } = useOrders();
+    const { orders, loading, error, pagination, setPage, setLimit, goToNextPage, goToPreviousPage, createOrder, updateOrder, updateOrderStatus, deleteOrder, refetchOrders } = useOrders(1, 20);
     const [modalState, setModalState] = useState<'form' | 'details' | 'cancel' | 'reopen' | 'delete' | null>(null);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showToast, setShowToast] = useState(false);
@@ -1581,6 +1581,95 @@ const Vendas: React.FC = () => {
                             ))}
                         </tbody>
                     </table>
+
+                    {/* Pagination Controls */}
+                    <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 mt-4">
+                        <div className="flex flex-1 justify-between sm:hidden">
+                            <button
+                                onClick={goToPreviousPage}
+                                disabled={pagination.page === 1}
+                                className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Anterior
+                            </button>
+                            <button
+                                onClick={goToNextPage}
+                                disabled={pagination.page >= pagination.totalPages}
+                                className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                Próximo
+                            </button>
+                        </div>
+                        <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+                            <div className="flex items-center gap-4">
+                                <p className="text-sm text-gray-700">
+                                    Mostrando <span className="font-medium">{((pagination.page - 1) * pagination.limit) + 1}</span> a{' '}
+                                    <span className="font-medium">{Math.min(pagination.page * pagination.limit, pagination.total)}</span> de{' '}
+                                    <span className="font-medium">{pagination.total}</span> pedidos
+                                </p>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-gray-600">Por página:</label>
+                                    <select
+                                        value={pagination.limit}
+                                        onChange={(e) => setLimit(Number(e.target.value))}
+                                        className="border border-gray-300 rounded-md text-sm p-1 focus:ring-orange-500 focus:border-orange-500"
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={20}>20</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+                                    <button
+                                        onClick={goToPreviousPage}
+                                        disabled={pagination.page === 1}
+                                        className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="sr-only">Anterior</span>
+                                        <i className="fa-solid fa-chevron-left text-sm"></i>
+                                    </button>
+
+                                    {/* Page numbers */}
+                                    {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                                        let pageNum;
+                                        if (pagination.totalPages <= 5) {
+                                            pageNum = i + 1;
+                                        } else if (pagination.page <= 3) {
+                                            pageNum = i + 1;
+                                        } else if (pagination.page >= pagination.totalPages - 2) {
+                                            pageNum = pagination.totalPages - 4 + i;
+                                        } else {
+                                            pageNum = pagination.page - 2 + i;
+                                        }
+                                        return (
+                                            <button
+                                                key={pageNum}
+                                                onClick={() => setPage(pageNum)}
+                                                className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ring-1 ring-inset ring-gray-300 focus:z-20 ${pagination.page === pageNum
+                                                        ? 'z-10 bg-orange-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600'
+                                                        : 'text-gray-900 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                {pageNum}
+                                            </button>
+                                        );
+                                    })}
+
+                                    <button
+                                        onClick={goToNextPage}
+                                        disabled={pagination.page >= pagination.totalPages}
+                                        className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="sr-only">Próximo</span>
+                                        <i className="fa-solid fa-chevron-right text-sm"></i>
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
