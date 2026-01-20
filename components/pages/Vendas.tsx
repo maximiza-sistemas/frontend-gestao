@@ -63,17 +63,24 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
 
     // Buscar histórico de pagamentos ao abrir o modal
     useEffect(() => {
-        if (isOpen && order?.id) {
-            setLoadingHistory(true);
-            import('../../services/api').then(m => m.api.getOrderPayments(order.id))
-                .then(response => {
+        const fetchPaymentHistory = async () => {
+            if (isOpen && order?.id) {
+                setLoadingHistory(true);
+                try {
+                    const response = await api.getOrderPayments(order.id);
                     if (response.success) {
                         setPaymentHistory(response.data || []);
+                    } else {
+                        console.error('Erro ao buscar pagamentos:', response.error);
                     }
-                })
-                .catch(console.error)
-                .finally(() => setLoadingHistory(false));
-        }
+                } catch (error) {
+                    console.error('Erro ao buscar histórico de pagamentos:', error);
+                } finally {
+                    setLoadingHistory(false);
+                }
+            }
+        };
+        fetchPaymentHistory();
     }, [isOpen, order?.id]);
 
     const orderTotal = Number(order?.totalValue ?? order?.total_value ?? 0);
