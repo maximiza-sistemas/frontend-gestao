@@ -1326,7 +1326,7 @@ const Vendas: React.FC = () => {
         setIsPaymentModalOpen(true);
     };
 
-    const handlePaymentSave = async (paymentData: { amount: number; payment_method: string; notes?: string }) => {
+    const handlePaymentSave = async (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string; receipt?: File }) => {
         if (!selectedOrderForPayment) return;
 
         try {
@@ -1342,6 +1342,7 @@ const Vendas: React.FC = () => {
             showMessage('Erro de conexão ao registrar pagamento', 'error');
         }
     };
+
 
     const handleOrderStatusClick = (order: Order) => {
         setSelectedOrderForStatus(order);

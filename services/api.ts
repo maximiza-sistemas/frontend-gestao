@@ -417,8 +417,50 @@ class ApiService {
   }
 
   async createOrder(orderData: any) {
+    // Se houver arquivo de comprovante, usar FormData
+    if (orderData.receipt_file instanceof File) {
+      const formData = new FormData();
+
+      // Adicionar dados do pedido
+      formData.append('client_id', orderData.client_id?.toString() || '');
+      formData.append('order_date', orderData.order_date || '');
+      formData.append('status', orderData.status || 'Pendente');
+      formData.append('payment_method', orderData.payment_method || '');
+      formData.append('payment_status', orderData.payment_status || 'Pendente');
+      formData.append('payment_cash_amount', orderData.payment_cash_amount?.toString() || '0');
+      formData.append('payment_term_amount', orderData.payment_term_amount?.toString() || '0');
+      if (orderData.notes) formData.append('notes', orderData.notes);
+      if (orderData.expenses) formData.append('expenses', orderData.expenses.toString());
+      if (orderData.gross_value) formData.append('gross_value', orderData.gross_value.toString());
+      if (orderData.net_value) formData.append('net_value', orderData.net_value.toString());
+      if (orderData.payment_details) formData.append('payment_details', orderData.payment_details);
+
+      // Adicionar itens como JSON string
+      if (orderData.items) {
+        formData.append('items', JSON.stringify(orderData.items));
+      }
+
+      // Adicionar o arquivo de comprovante
+      formData.append('receipt', orderData.receipt_file);
+
+      const headers: Record<string, string> = {};
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
+
+      console.log('📤 Criando pedido com comprovante via FormData');
+      const response = await fetch(`${API_BASE_URL}/orders`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      return response.json();
+    }
+
+    // Sem arquivo, usar JSON normal
     return this.post('/orders', orderData);
   }
+
 
   async updateOrder(id: number, orderData: any) {
     return this.put(`/orders/${id}`, orderData);
