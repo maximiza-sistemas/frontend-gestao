@@ -20,6 +20,8 @@ export interface Order {
   paid_amount?: number;
   pending_amount?: number;
   expenses?: number;
+  items_summary?: string;
+  total_quantity?: number;
 }
 
 export interface PaginationInfo {

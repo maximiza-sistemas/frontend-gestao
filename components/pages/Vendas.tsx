@@ -1495,6 +1495,8 @@ const Vendas: React.FC = () => {
                             <tr>
                                 <th scope="col" className="px-6 py-3 sticky left-0 bg-gray-50 z-10">ID do Pedido</th>
                                 <th scope="col" className="px-6 py-3 sticky left-[100px] bg-gray-50 z-10">Cliente</th>
+                                <th scope="col" className="px-6 py-3">Produto</th>
+                                <th scope="col" className="px-6 py-3 text-center">Qtd</th>
                                 <th scope="col" className="px-6 py-3">Data</th>
                                 <th scope="col" className="px-6 py-3 text-right">Valor Total</th>
                                 <th scope="col" className="px-6 py-3 text-right">Desconto</th>
@@ -1502,7 +1504,6 @@ const Vendas: React.FC = () => {
                                 <th scope="col" className="px-6 py-3 text-right">Pago</th>
                                 <th scope="col" className="px-6 py-3 text-right">Pendente</th>
                                 <th scope="col" className="px-6 py-3 text-center">Pagamento</th>
-                                <th scope="col" className="px-6 py-3 text-center">Status</th>
                                 <th scope="col" className="px-6 py-3 text-center">Ações</th>
                             </tr>
                         </thead>
@@ -1511,6 +1512,21 @@ const Vendas: React.FC = () => {
                                 <tr key={order.id} className="bg-white border-b hover:bg-gray-50">
                                     <td className="px-6 py-4 font-medium text-gray-900 sticky left-0 bg-white z-10">#{order.id}</td>
                                     <td className="px-6 py-4 whitespace-nowrap sticky left-[100px] bg-white z-10 font-medium">{order.clientName}</td>
+                                    <td className="px-6 py-4">
+                                        <span className="text-sm text-gray-700" title={order.items_summary || '-'}>
+                                            {order.items_summary
+                                                ? (order.items_summary.length > 25
+                                                    ? order.items_summary.substring(0, 25) + '...'
+                                                    : order.items_summary)
+                                                : '-'
+                                            }
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 text-center">
+                                        <span className="font-semibold text-blue-600">
+                                            {order.total_quantity || 0}
+                                        </span>
+                                    </td>
                                     <td className="px-6 py-4">{formatDisplayDate(order.date)}</td>
                                     <td className="px-6 py-4 text-right">{order.totalValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                                     <td className="px-6 py-4 text-right">
@@ -1547,13 +1563,6 @@ const Vendas: React.FC = () => {
                                             {order.paymentMethod === 'Misto' && '💰 Misto'}
                                             {!order.paymentMethod && '-'}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        <div onClick={() => handleOrderStatusClick(order)} className="cursor-pointer hover:opacity-80 transition-opacity">
-                                            <Badge variant={getOrderStatusVariant(order.status)}>
-                                                {order.status} <i className="fas fa-pencil-alt ml-1 text-[10px]"></i>
-                                            </Badge>
-                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex justify-center space-x-2">

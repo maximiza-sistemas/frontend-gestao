@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Button from '../common/Button';
 import api from '../../services/api';
 import { DetailedReportData } from '../../types';
+import { useClients } from '../../hooks/useClients';
 
 const formatCurrency = (value: number) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -17,9 +18,13 @@ const RelatorioDetalhado: React.FC = () => {
     const [startDate, setStartDate] = useState(startOfMonthIso);
     const [endDate, setEndDate] = useState(todayIso);
     const [paymentMethodFilter, setPaymentMethodFilter] = useState('Todos');
+    const [clientFilter, setClientFilter] = useState('Todos');
     const [reportData, setReportData] = useState<DetailedReportData | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Hook para buscar clientes
+    const { clients } = useClients();
 
     const { normalizedStart, normalizedEnd } = useMemo(() => {
         if (startDate <= endDate) {
@@ -89,7 +94,7 @@ const RelatorioDetalhado: React.FC = () => {
     const liquidStock = (reportData as any)?.liquidStock ?? [];
     const containerStock = (reportData as any)?.containerStock ?? [];
 
-    // Obter lista \u00fanica de m\u00e9todos de pagamento para o filtro
+    // Obter lista única de métodos de pagamento para o filtro
     const paymentMethods = useMemo(() => {
         const methods = new Set<string>();
         receivementSummary.forEach(item => methods.add(item.method));
@@ -97,29 +102,116 @@ const RelatorioDetalhado: React.FC = () => {
         return ['Todos', ...Array.from(methods).sort()];
     }, [receivementSummary, paymentBreakdown]);
 
-    // Filtrar recebimentos por m\u00e9todo de pagamento
+    // Filtrar vendas por cliente (case-insensitive e trim)
+    const filteredSales = useMemo(() => {
+        if (clientFilter === 'Todos') return sales;
+        const filterLower = clientFilter.toLowerCase().trim();
+        return sales.filter(sale => {
+            const saleClient = (sale.client || '').toLowerCase().trim();
+            return saleClient === filterLower || saleClient.includes(filterLower) || filterLower.includes(saleClient);
+        });
+    }, [sales, clientFilter]);
+
+    // Filtrar recebimentos por método de pagamento e cliente (case-insensitive)
     const filteredReceivements = useMemo(() => {
-        if (paymentMethodFilter === 'Todos') return receivements;
-        return receivements.filter(item => item.method === paymentMethodFilter);
-    }, [receivements, paymentMethodFilter]);
+        let filtered = receivements;
+        if (paymentMethodFilter !== 'Todos') {
+            filtered = filtered.filter(item => item.method === paymentMethodFilter);
+        }
+        if (clientFilter !== 'Todos') {
+            const filterLower = clientFilter.toLowerCase().trim();
+            filtered = filtered.filter(item => {
+                const recClient = (item.client || '').toLowerCase().trim();
+                return recClient === filterLower || recClient.includes(filterLower) || filterLower.includes(recClient);
+            });
+        }
+        return filtered;
+    }, [receivements, paymentMethodFilter, clientFilter]);
 
     const filteredReceivementSummary = useMemo(() => {
         if (paymentMethodFilter === 'Todos') return receivementSummary;
         return receivementSummary.filter(item => item.method === paymentMethodFilter);
     }, [receivementSummary, paymentMethodFilter]);
 
+    // Calcular resumo de produtos baseado nas vendas filtradas (por cliente)
+    const filteredProductSummary = useMemo(() => {
+        if (clientFilter === 'Todos') return productSummary;
+        // Reagrupar produtos das vendas filtradas
+        const productMap = new Map<string, { quantity: number; total: number }>();
+        filteredSales.forEach(sale => {
+            const existing = productMap.get(sale.product) || { quantity: 0, total: 0 };
+            productMap.set(sale.product, {
+                quantity: existing.quantity + sale.quantity,
+                total: existing.total + sale.total
+            });
+        });
+        return Array.from(productMap.entries()).map(([product, data]) => ({
+            product,
+            quantity: data.quantity,
+            averagePrice: data.quantity > 0 ? data.total / data.quantity : 0,
+            total: data.total
+        }));
+    }, [productSummary, filteredSales, clientFilter]);
+
+    // Calcular breakdown de pagamentos baseado nas vendas filtradas (por cliente)
+    const filteredPaymentBreakdown = useMemo(() => {
+        if (clientFilter === 'Todos') return paymentBreakdown;
+        // Reagrupar métodos de pagamento das vendas filtradas
+        const methodMap = new Map<string, { quantity: number; amount: number }>();
+        filteredSales.forEach(sale => {
+            const method = sale.paymentMethod || 'Outros';
+            const existing = methodMap.get(method) || { quantity: 0, amount: 0 };
+            methodMap.set(method, {
+                quantity: existing.quantity + 1,
+                amount: existing.amount + sale.total
+            });
+        });
+        const totalAmount = Array.from(methodMap.values()).reduce((sum, v) => sum + v.amount, 0);
+        return Array.from(methodMap.entries()).map(([method, data]) => ({
+            method,
+            quantity: data.quantity,
+            amount: data.amount,
+            percentage: totalAmount > 0 ? (data.amount / totalAmount) * 100 : 0
+        }));
+    }, [paymentBreakdown, filteredSales, clientFilter]);
+
+    // Filtrar detalhamento geral baseado no cliente
+    const filteredGeneralDetail = useMemo(() => {
+        if (clientFilter === 'Todos') return generalDetail;
+        return filteredPaymentBreakdown;
+    }, [generalDetail, filteredPaymentBreakdown, clientFilter]);
+
+    // Recalcular resumo de recebimentos filtrado por cliente
+    const filteredReceivementSummaryByClient = useMemo(() => {
+        if (clientFilter === 'Todos') return filteredReceivementSummary;
+        // Reagrupar métodos dos recebimentos filtrados
+        const methodMap = new Map<string, { quantity: number; amount: number }>();
+        filteredReceivements.forEach(item => {
+            const existing = methodMap.get(item.method) || { quantity: 0, amount: 0 };
+            methodMap.set(item.method, {
+                quantity: existing.quantity + 1,
+                amount: existing.amount + item.amount
+            });
+        });
+        return Array.from(methodMap.entries()).map(([method, data]) => ({
+            method,
+            quantity: data.quantity,
+            amount: data.amount
+        }));
+    }, [filteredReceivementSummary, filteredReceivements, clientFilter]);
+
     const totalSales = useMemo(
-        () => sales.reduce((sum, sale) => sum + sale.total, 0),
-        [sales]
+        () => filteredSales.reduce((sum, sale) => sum + sale.total, 0),
+        [filteredSales]
     );
     const totalQuantity = useMemo(
-        () => sales.reduce((sum, sale) => sum + sale.quantity, 0),
-        [sales]
+        () => filteredSales.reduce((sum, sale) => sum + sale.quantity, 0),
+        [filteredSales]
     );
     const averageTicket = totalQuantity ? totalSales / totalQuantity : 0;
     const paymentTotal = useMemo(
-        () => paymentBreakdown.reduce((sum, item) => sum + item.amount, 0),
-        [paymentBreakdown]
+        () => filteredPaymentBreakdown.reduce((sum, item) => sum + item.amount, 0),
+        [filteredPaymentBreakdown]
     );
     const totalExpenses = useMemo(
         () => expenses.reduce((sum, expense) => sum + expense.amount, 0),
@@ -128,10 +220,13 @@ const RelatorioDetalhado: React.FC = () => {
 
     // Novas métricas: Despesas por pedido e Valor Líquido
     const orderExpensesTotal = useMemo(
-        () => sales.reduce((sum, sale) => sum + ((sale as any).expenses || 0), 0),
-        [sales]
+        () => filteredSales.reduce((sum, sale) => sum + ((sale as any).expenses || 0), 0),
+        [filteredSales]
     );
     const netValue = totalSales - orderExpensesTotal;
+
+    // Nome do cliente selecionado para exibição
+    const selectedClientName = clientFilter !== 'Todos' ? clientFilter : null;
 
     const handleDownloadPdf = () => {
         if (!reportData) {
@@ -329,6 +424,366 @@ const RelatorioDetalhado: React.FC = () => {
         doc.save(`relatorio-detalhado-${metadata.date.replace(/\//g, '-')}.pdf`);
     };
 
+    const handlePrint = () => {
+        if (!reportData) {
+            window.alert('Gere o relatório antes de imprimir.');
+            return;
+        }
+
+        // Criar HTML para impressão
+        const printContent = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Relatório Detalhado - ${appliedPeriod}</title>
+                <style>
+                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                    body { 
+                        font-family: Arial, Helvetica, sans-serif; 
+                        font-size: 11px; 
+                        line-height: 1.4;
+                        color: #333;
+                        padding: 20px;
+                    }
+                    .header { 
+                        text-align: center; 
+                        margin-bottom: 20px; 
+                        border-bottom: 2px solid #333;
+                        padding-bottom: 15px;
+                    }
+                    .header h1 { font-size: 18px; margin-bottom: 8px; }
+                    .header p { font-size: 11px; color: #666; margin: 3px 0; }
+                    .summary-cards {
+                        display: flex;
+                        justify-content: space-between;
+                        margin-bottom: 20px;
+                        gap: 10px;
+                    }
+                    .summary-card {
+                        flex: 1;
+                        padding: 10px;
+                        border: 1px solid #ddd;
+                        border-radius: 6px;
+                        text-align: center;
+                    }
+                    .summary-card .label { font-size: 9px; color: #666; text-transform: uppercase; }
+                    .summary-card .value { font-size: 14px; font-weight: bold; margin-top: 4px; }
+                    .summary-card .value.green { color: #16a34a; }
+                    .summary-card .value.red { color: #dc2626; }
+                    section { margin-bottom: 20px; page-break-inside: avoid; }
+                    section h2 { 
+                        font-size: 12px; 
+                        text-transform: uppercase; 
+                        background: #f5f5f5;
+                        padding: 8px 10px;
+                        border-left: 4px solid #f97316;
+                        margin-bottom: 8px;
+                    }
+                    table { 
+                        width: 100%; 
+                        border-collapse: collapse; 
+                        font-size: 10px;
+                    }
+                    th { 
+                        background: #f5f7fa; 
+                        padding: 6px 8px; 
+                        text-align: left; 
+                        font-weight: 600;
+                        border-bottom: 2px solid #ddd;
+                        text-transform: uppercase;
+                        font-size: 9px;
+                    }
+                    th.right, td.right { text-align: right; }
+                    td { 
+                        padding: 6px 8px; 
+                        border-bottom: 1px solid #eee; 
+                    }
+                    tr.total { 
+                        background: #f5f7fa; 
+                        font-weight: bold; 
+                    }
+                    tr.total td { border-top: 2px solid #ddd; }
+                    .green { color: #16a34a; }
+                    .red { color: #dc2626; }
+                    .orange { color: #ea580c; }
+                    .footer {
+                        margin-top: 30px;
+                        padding-top: 15px;
+                        border-top: 1px solid #ddd;
+                        text-align: center;
+                        font-size: 9px;
+                        color: #999;
+                    }
+                    @media print {
+                        body { padding: 10px; }
+                        .summary-cards { flex-wrap: wrap; }
+                        .summary-card { min-width: 18%; }
+                        section { page-break-inside: avoid; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>RELATÓRIO DETALHADO DE VENDAS</h1>
+                    <p><strong>Período:</strong> ${appliedPeriod}</p>
+                    <p><strong>Unidade:</strong> ${metadata.unit} · ${metadata.city}</p>
+                    <p><strong>Emitido em:</strong> ${metadata.date} | <strong>Preparado por:</strong> ${metadata.preparedBy}</p>
+                    ${clientFilter !== 'Todos' ? `<p><strong>Cliente:</strong> ${clientFilter}</p>` : ''}
+                    ${paymentMethodFilter !== 'Todos' ? `<p><strong>Pagamento:</strong> ${paymentMethodFilter}</p>` : ''}
+                </div>
+
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <div class="label">💰 Faturamento Bruto</div>
+                        <div class="value green">${formatCurrency(totalSales)}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">📦 Quantidade Total</div>
+                        <div class="value">${totalQuantity} un</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">💸 Despesas</div>
+                        <div class="value red">- ${formatCurrency(orderExpensesTotal)}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">✅ Valor Líquido</div>
+                        <div class="value ${netValue >= 0 ? 'green' : 'red'}">${formatCurrency(netValue)}</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="label">📊 Ticket Médio</div>
+                        <div class="value">${formatCurrency(averageTicket)}</div>
+                    </div>
+                </div>
+
+                <section>
+                    <h2>Vendas Detalhadas ${clientFilter !== 'Todos' ? `(${clientFilter})` : ''}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Cidade</th>
+                                <th>Unidade</th>
+                                <th>Produto</th>
+                                <th class="right">Qtd</th>
+                                <th class="right">Valor Bruto</th>
+                                <th class="right">Despesas</th>
+                                <th class="right">Valor Líquido</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredSales.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:#999;">Nenhuma venda no período.</td></tr>' : ''}
+                            ${filteredSales.map(sale => {
+            const saleExp = (sale as any).expenses || 0;
+            const saleNet = sale.total - saleExp;
+            return `<tr>
+                                    <td>${sale.client}</td>
+                                    <td>${sale.city}</td>
+                                    <td>${sale.unit}</td>
+                                    <td>${sale.product}</td>
+                                    <td class="right">${sale.quantity}</td>
+                                    <td class="right green">${formatCurrency(sale.total)}</td>
+                                    <td class="right red">${saleExp > 0 ? '- ' + formatCurrency(saleExp) : '-'}</td>
+                                    <td class="right">${formatCurrency(saleNet)}</td>
+                                </tr>`;
+        }).join('')}
+                            ${filteredSales.length > 0 ? `<tr class="total">
+                                <td colspan="4">Total Geral</td>
+                                <td class="right">${totalQuantity}</td>
+                                <td class="right green">${formatCurrency(totalSales)}</td>
+                                <td class="right red">${orderExpensesTotal > 0 ? '- ' + formatCurrency(orderExpensesTotal) : '-'}</td>
+                                <td class="right">${formatCurrency(netValue)}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Produtos</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Produto</th>
+                                <th class="right">Quantidade</th>
+                                <th class="right">Preço Unit.</th>
+                                <th class="right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredProductSummary.map(item => `<tr>
+                                <td>${item.product}</td>
+                                <td class="right">${item.quantity}</td>
+                                <td class="right">${formatCurrency(item.averagePrice)}</td>
+                                <td class="right">${formatCurrency(item.total)}</td>
+                            </tr>`).join('')}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Financeiro</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Forma</th>
+                                <th class="right">Quantidade</th>
+                                <th class="right">Total</th>
+                                <th class="right">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredPaymentBreakdown.map(item => {
+            const pct = paymentTotal ? (item.amount / paymentTotal) * 100 : 0;
+            return `<tr>
+                                    <td>${item.method}</td>
+                                    <td class="right">${item.quantity}</td>
+                                    <td class="right">${formatCurrency(item.amount)}</td>
+                                    <td class="right">${pct.toFixed(1)}%</td>
+                                </tr>`;
+        }).join('')}
+                            ${filteredPaymentBreakdown.length > 0 ? `<tr class="total">
+                                <td>Total</td>
+                                <td class="right">${filteredPaymentBreakdown.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                <td class="right">${formatCurrency(paymentTotal)}</td>
+                                <td class="right">100%</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Recebimentos ${paymentMethodFilter !== 'Todos' ? `(${paymentMethodFilter})` : ''}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Cliente</th>
+                                <th>Forma</th>
+                                <th>Documento</th>
+                                <th class="right">Valor</th>
+                                <th class="right">Recebido</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredReceivements.length === 0 ? '<tr><td colspan="6" style="text-align:center;color:#999;">Nenhum recebimento no período.</td></tr>' : ''}
+                            ${filteredReceivements.map(item => `<tr>
+                                <td>${item.code}</td>
+                                <td>${item.client}</td>
+                                <td>${item.method}</td>
+                                <td>${item.document}</td>
+                                <td class="right">${formatCurrency(item.amount)}</td>
+                                <td class="right">${formatCurrency(item.received ?? item.amount)}</td>
+                            </tr>`).join('')}
+                            ${filteredReceivements.length > 0 ? `<tr class="total">
+                                <td colspan="4">Total</td>
+                                <td class="right">${formatCurrency(filteredReceivements.reduce((sum, item) => sum + item.amount, 0))}</td>
+                                <td class="right">${formatCurrency(filteredReceivements.reduce((sum, item) => sum + (item.received ?? item.amount), 0))}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Resumo dos Recebimentos ${paymentMethodFilter !== 'Todos' ? `(${paymentMethodFilter})` : ''}</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Forma</th>
+                                <th class="right">Quantidade</th>
+                                <th class="right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredReceivementSummaryByClient.map(item => `<tr>
+                                <td>${item.method}</td>
+                                <td class="right">${item.quantity}</td>
+                                <td class="right">${formatCurrency(item.amount)}</td>
+                            </tr>`).join('')}
+                            ${filteredReceivementSummaryByClient.length > 0 ? `<tr class="total">
+                                <td>Total</td>
+                                <td class="right">${filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                <td class="right">${formatCurrency(filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.amount, 0))}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Despesas (Todas as Unidades)</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Cedente</th>
+                                <th>Vencimento</th>
+                                <th>Documento</th>
+                                <th class="right">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${expenses.length === 0 ? '<tr><td colspan="4" style="text-align:center;color:#999;">Nenhuma despesa no período.</td></tr>' : ''}
+                            ${expenses.map(expense => `<tr>
+                                <td>${expense.provider}</td>
+                                <td>${expense.dueDate}</td>
+                                <td>${expense.document}</td>
+                                <td class="right">${formatCurrency(expense.amount)}</td>
+                            </tr>`).join('')}
+                            ${expenses.length > 0 ? `<tr class="total">
+                                <td colspan="3">Total Geral</td>
+                                <td class="right">${formatCurrency(totalExpenses)}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <section>
+                    <h2>Detalhamento Geral</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Forma</th>
+                                <th class="right">Quantidade</th>
+                                <th class="right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredGeneralDetail.map(item => `<tr>
+                                <td>${item.method}</td>
+                                <td class="right">${item.quantity}</td>
+                                <td class="right">${formatCurrency(item.amount)}</td>
+                            </tr>`).join('')}
+                            ${filteredGeneralDetail.length > 0 ? `<tr class="total">
+                                <td>Total</td>
+                                <td class="right">${filteredGeneralDetail.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                <td class="right">${formatCurrency(filteredGeneralDetail.reduce((sum, item) => sum + item.amount, 0))}</td>
+                            </tr>` : ''}
+                        </tbody>
+                    </table>
+                </section>
+
+                <div class="footer">
+                    <p>SISGÁS - Sistema de Gestão de Distribuidora de Gás</p>
+                    <p>Relatório gerado em ${metadata.date}</p>
+                </div>
+            </body>
+            </html>
+        `;
+
+        // Criar nova janela e imprimir
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.focus();
+            // Aguardar carregamento antes de imprimir
+            setTimeout(() => {
+                printWindow.print();
+            }, 250);
+        } else {
+            window.alert('Não foi possível abrir a janela de impressão. Verifique se pop-ups estão habilitados.');
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -340,7 +795,7 @@ const RelatorioDetalhado: React.FC = () => {
                     </p>
                 </div>
                 <div className="flex gap-3">
-                    <Button variant="secondary" icon="fa-solid fa-print" onClick={() => window.print()}>
+                    <Button variant="secondary" icon="fa-solid fa-print" onClick={handlePrint} disabled={loading || !reportData}>
                         Imprimir
                     </Button>
                     <Button
@@ -355,7 +810,7 @@ const RelatorioDetalhado: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                     <div>
                         <label className="text-sm font-medium text-gray-600 block mb-1">Data inicial</label>
                         <input
@@ -385,6 +840,19 @@ const RelatorioDetalhado: React.FC = () => {
                         >
                             {paymentMethods.map(method => (
                                 <option key={method} value={method}>{method}</option>
+                            ))}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="text-sm font-medium text-gray-600 block mb-1">Cliente</label>
+                        <select
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white"
+                            value={clientFilter}
+                            onChange={(e) => setClientFilter(e.target.value)}
+                        >
+                            <option value="Todos">Todos os Clientes</option>
+                            {clients.map(client => (
+                                <option key={client.id} value={client.name}>{client.name}</option>
                             ))}
                         </select>
                     </div>
@@ -442,8 +910,10 @@ const RelatorioDetalhado: React.FC = () => {
 
             <section className="bg-white rounded-xl shadow-sm border">
                 <div className="px-6 py-4 border-b flex items-center justify-between">
-                    <h2 className="text-lg font-semibold text-gray-800 uppercase tracking-wide">Vendas Detalhadas</h2>
-                    <span className="text-sm text-gray-500">Total de registros: {sales.length}</span>
+                    <h2 className="text-lg font-semibold text-gray-800 uppercase tracking-wide">
+                        Vendas Detalhadas {clientFilter !== 'Todos' && <span className="text-orange-600">({clientFilter})</span>}
+                    </h2>
+                    <span className="text-sm text-gray-500">Total de registros: {filteredSales.length}</span>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full text-sm">
@@ -460,14 +930,14 @@ const RelatorioDetalhado: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {sales.length === 0 && (
+                            {filteredSales.length === 0 && (
                                 <tr>
                                     <td colSpan={8} className="px-4 py-3 text-center text-gray-500">
                                         Nenhuma venda registrada no período selecionado.
                                     </td>
                                 </tr>
                             )}
-                            {sales.map((sale, index) => {
+                            {filteredSales.map((sale, index) => {
                                 const saleExpenses = (sale as any).expenses || 0;
                                 const saleNetValue = sale.total - saleExpenses;
                                 return (
@@ -489,7 +959,7 @@ const RelatorioDetalhado: React.FC = () => {
                                     </tr>
                                 );
                             })}
-                            {sales.length > 0 && (
+                            {filteredSales.length > 0 && (
                                 <tr className="bg-gray-50 font-semibold text-gray-800">
                                     <td className="px-4 py-3" colSpan={4}>Total Geral</td>
                                     <td className="px-4 py-3 text-right">{totalQuantity}</td>
@@ -521,14 +991,14 @@ const RelatorioDetalhado: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {productSummary.length === 0 && (
+                                {filteredProductSummary.length === 0 && (
                                     <tr>
                                         <td colSpan={4} className="px-4 py-3 text-center text-gray-500">
                                             Sem dados de produtos para o período selecionado.
                                         </td>
                                     </tr>
                                 )}
-                                {productSummary.map((item) => (
+                                {filteredProductSummary.map((item) => (
                                     <tr key={item.product} className="border-b last:border-b-0">
                                         <td className="px-4 py-3 font-medium text-gray-800">{item.product}</td>
                                         <td className="px-4 py-3 text-right">{item.quantity}</td>
@@ -556,14 +1026,14 @@ const RelatorioDetalhado: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {paymentBreakdown.length === 0 && (
+                                {filteredPaymentBreakdown.length === 0 && (
                                     <tr>
                                         <td colSpan={4} className="px-4 py-3 text-center text-gray-500">
                                             Não há registros financeiros neste período.
                                         </td>
                                     </tr>
                                 )}
-                                {paymentBreakdown.map((item) => {
+                                {filteredPaymentBreakdown.map((item) => {
                                     const percentage = paymentTotal ? (item.amount / paymentTotal) * 100 : 0;
                                     return (
                                         <tr key={item.method} className="border-b last:border-b-0">
@@ -574,10 +1044,10 @@ const RelatorioDetalhado: React.FC = () => {
                                         </tr>
                                     );
                                 })}
-                                {paymentBreakdown.length > 0 && (
+                                {filteredPaymentBreakdown.length > 0 && (
                                     <tr className="bg-gray-50 font-semibold text-gray-800">
                                         <td className="px-4 py-3">Total</td>
-                                        <td className="px-4 py-3 text-right">{paymentBreakdown.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                        <td className="px-4 py-3 text-right">{filteredPaymentBreakdown.reduce((sum, item) => sum + item.quantity, 0)}</td>
                                         <td className="px-4 py-3 text-right">{formatCurrency(paymentTotal)}</td>
                                         <td className="px-4 py-3 text-right">100%</td>
                                     </tr>
@@ -644,25 +1114,25 @@ const RelatorioDetalhado: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredReceivementSummary.length === 0 && (
+                                {filteredReceivementSummaryByClient.length === 0 && (
                                     <tr>
                                         <td colSpan={3} className="px-4 py-3 text-center text-gray-500">
                                             Nenhum recebimento consolidado no período.
                                         </td>
                                     </tr>
                                 )}
-                                {filteredReceivementSummary.map((item) => (
+                                {filteredReceivementSummaryByClient.map((item) => (
                                     <tr key={item.method} className="border-b last:border-b-0">
                                         <td className="px-4 py-3 font-medium text-gray-800">{item.method}</td>
                                         <td className="px-4 py-3 text-right">{item.quantity}</td>
                                         <td className="px-4 py-3 text-right">{formatCurrency(item.amount)}</td>
                                     </tr>
                                 ))}
-                                {filteredReceivementSummary.length > 0 && (
+                                {filteredReceivementSummaryByClient.length > 0 && (
                                     <tr className="bg-gray-50 font-semibold text-gray-800">
                                         <td className="px-4 py-3">Total</td>
-                                        <td className="px-4 py-3 text-right">{filteredReceivementSummary.reduce((sum, item) => sum + item.quantity, 0)}</td>
-                                        <td className="px-4 py-3 text-right">{formatCurrency(filteredReceivementSummary.reduce((sum, item) => sum + item.amount, 0))}</td>
+                                        <td className="px-4 py-3 text-right">{filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                        <td className="px-4 py-3 text-right">{formatCurrency(filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.amount, 0))}</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -726,25 +1196,25 @@ const RelatorioDetalhado: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {generalDetail.length === 0 && (
+                            {filteredGeneralDetail.length === 0 && (
                                 <tr>
                                     <td colSpan={3} className="px-4 py-3 text-center text-gray-500">
                                         Sem registros no período selecionado.
                                     </td>
                                 </tr>
                             )}
-                            {generalDetail.map((item) => (
+                            {filteredGeneralDetail.map((item) => (
                                 <tr key={item.method} className="border-b last:border-b-0">
                                     <td className="px-4 py-3 font-medium text-gray-800">{item.method}</td>
                                     <td className="px-4 py-3 text-right">{item.quantity}</td>
                                     <td className="px-4 py-3 text-right">{formatCurrency(item.amount)}</td>
                                 </tr>
                             ))}
-                            {generalDetail.length > 0 && (
+                            {filteredGeneralDetail.length > 0 && (
                                 <tr className="bg-gray-50 font-semibold text-gray-800">
                                     <td className="px-4 py-3">Total</td>
-                                    <td className="px-4 py-3 text-right">{generalDetail.reduce((sum, item) => sum + item.quantity, 0)}</td>
-                                    <td className="px-4 py-3 text-right">{formatCurrency(generalDetail.reduce((sum, item) => sum + item.amount, 0))}</td>
+                                    <td className="px-4 py-3 text-right">{filteredGeneralDetail.reduce((sum, item) => sum + item.quantity, 0)}</td>
+                                    <td className="px-4 py-3 text-right">{formatCurrency(filteredGeneralDetail.reduce((sum, item) => sum + item.amount, 0))}</td>
                                 </tr>
                             )}
                         </tbody>
