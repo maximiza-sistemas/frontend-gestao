@@ -294,19 +294,21 @@ const RelatorioDetalhado: React.FC = () => {
 
         addTable(
             'Vendas',
-            ['Cliente', 'Cidade', 'Unidade', 'Produto', 'Qtd.', 'Total', 'P. Unitário'],
+            ['Cliente', 'Cidade', 'Produto', 'Data', 'Situação', 'Qtd.', 'Total', 'P. Unitário'],
             [
                 ...sales.map((sale) => [
                     sale.client,
                     sale.city,
-                    sale.unit,
                     sale.product,
+                    sale.date ? formatPtDate(sale.date) : '-',
+                    (sale as any).paymentStatus || 'Pendente',
                     sale.quantity,
                     formatCurrency(sale.total),
                     formatCurrency(sale.unitPrice),
                 ]),
                 [
                     'Total Geral',
+                    '',
                     '',
                     '',
                     '',
@@ -564,8 +566,9 @@ const RelatorioDetalhado: React.FC = () => {
                             <tr>
                                 <th>Cliente</th>
                                 <th>Cidade</th>
-                                <th>Unidade</th>
                                 <th>Produto</th>
+                                <th>Data</th>
+                                <th>Situação</th>
                                 <th class="right">Qtd</th>
                                 <th class="right">Valor Bruto</th>
                                 <th class="right">Despesas</th>
@@ -573,15 +576,17 @@ const RelatorioDetalhado: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            ${filteredSales.length === 0 ? '<tr><td colspan="8" style="text-align:center;color:#999;">Nenhuma venda no período.</td></tr>' : ''}
+                            ${filteredSales.length === 0 ? '<tr><td colspan="9" style="text-align:center;color:#999;">Nenhuma venda no período.</td></tr>' : ''}
                             ${filteredSales.map(sale => {
             const saleExp = (sale as any).expenses || 0;
             const saleNet = sale.total - saleExp;
+            const paymentStatusClass = (sale as any).paymentStatus === 'Pago' ? 'green' : (sale as any).paymentStatus === 'Vencido' ? 'red' : 'orange';
             return `<tr>
                                     <td>${sale.client}</td>
                                     <td>${sale.city}</td>
-                                    <td>${sale.unit}</td>
                                     <td>${sale.product}</td>
+                                    <td>${sale.date ? formatPtDate(sale.date) : '-'}</td>
+                                    <td class="${paymentStatusClass}">${(sale as any).paymentStatus || 'Pendente'}</td>
                                     <td class="right">${sale.quantity}</td>
                                     <td class="right green">${formatCurrency(sale.total)}</td>
                                     <td class="right red">${saleExp > 0 ? '- ' + formatCurrency(saleExp) : '-'}</td>
@@ -589,7 +594,7 @@ const RelatorioDetalhado: React.FC = () => {
                                 </tr>`;
         }).join('')}
                             ${filteredSales.length > 0 ? `<tr class="total">
-                                <td colspan="4">Total Geral</td>
+                                <td colspan="5">Total Geral</td>
                                 <td class="right">${totalQuantity}</td>
                                 <td class="right green">${formatCurrency(totalSales)}</td>
                                 <td class="right red">${orderExpensesTotal > 0 ? '- ' + formatCurrency(orderExpensesTotal) : '-'}</td>
@@ -921,8 +926,9 @@ const RelatorioDetalhado: React.FC = () => {
                             <tr>
                                 <th className="px-4 py-3 text-left">Cliente</th>
                                 <th className="px-4 py-3 text-left">Cidade</th>
-                                <th className="px-4 py-3 text-left">Unidade</th>
                                 <th className="px-4 py-3 text-left">Produto</th>
+                                <th className="px-4 py-3 text-left">Data</th>
+                                <th className="px-4 py-3 text-left">Situação</th>
                                 <th className="px-4 py-3 text-right">Qtd</th>
                                 <th className="px-4 py-3 text-right">Valor Bruto</th>
                                 <th className="px-4 py-3 text-right">Despesas</th>
@@ -932,7 +938,7 @@ const RelatorioDetalhado: React.FC = () => {
                         <tbody>
                             {filteredSales.length === 0 && (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-3 text-center text-gray-500">
+                                    <td colSpan={9} className="px-4 py-3 text-center text-gray-500">
                                         Nenhuma venda registrada no período selecionado.
                                     </td>
                                 </tr>
@@ -940,12 +946,15 @@ const RelatorioDetalhado: React.FC = () => {
                             {filteredSales.map((sale, index) => {
                                 const saleExpenses = (sale as any).expenses || 0;
                                 const saleNetValue = sale.total - saleExpenses;
+                                const paymentStatus = (sale as any).paymentStatus || 'Pendente';
+                                const paymentStatusClass = paymentStatus === 'Pago' ? 'text-green-600' : paymentStatus === 'Vencido' ? 'text-red-600' : 'text-orange-600';
                                 return (
                                     <tr key={`${sale.client}-${index}`} className="border-b last:border-b-0">
                                         <td className="px-4 py-3 font-medium text-gray-800">{sale.client}</td>
                                         <td className="px-4 py-3">{sale.city}</td>
-                                        <td className="px-4 py-3">{sale.unit}</td>
                                         <td className="px-4 py-3">{sale.product}</td>
+                                        <td className="px-4 py-3">{sale.date ? formatPtDate(sale.date) : '-'}</td>
+                                        <td className={`px-4 py-3 font-medium ${paymentStatusClass}`}>{paymentStatus}</td>
                                         <td className="px-4 py-3 text-right">{sale.quantity}</td>
                                         <td className="px-4 py-3 text-right font-semibold text-green-600">
                                             {formatCurrency(sale.total)}
@@ -961,7 +970,7 @@ const RelatorioDetalhado: React.FC = () => {
                             })}
                             {filteredSales.length > 0 && (
                                 <tr className="bg-gray-50 font-semibold text-gray-800">
-                                    <td className="px-4 py-3" colSpan={4}>Total Geral</td>
+                                    <td className="px-4 py-3" colSpan={5}>Total Geral</td>
                                     <td className="px-4 py-3 text-right">{totalQuantity}</td>
                                     <td className="px-4 py-3 text-right text-green-600">{formatCurrency(totalSales)}</td>
                                     <td className="px-4 py-3 text-right text-red-600">

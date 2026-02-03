@@ -213,6 +213,8 @@ export interface DetailedSaleRecord {
     unitPrice: number;
     date: string;
     paymentMethod: string;
+    status?: string;
+    paymentStatus?: string;
 }
 
 export interface ProductSummary {
