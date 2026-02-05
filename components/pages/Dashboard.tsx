@@ -2,8 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import api from '../../services/api';
 
-import FilterBar from '../common/FilterBar';
-
 const COLORS = ['#f58220', '#f9a825', '#fbc02d'];
 
 interface KPICardProps {
@@ -31,18 +29,23 @@ interface StockDistribution {
 }
 
 const KPICard: React.FC<KPICardProps> = ({ title, value, icon, loading = false }) => (
-  <div className="bg-white p-6 rounded-lg shadow-sm flex items-center">
-    <div className="bg-orange-100 p-3 rounded-full mr-4 flex items-center justify-center w-12 h-12">
-      <i className={`${icon} text-xl text-orange-600`}></i>
+  <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+    {/* Ícone no topo */}
+    <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${icon.includes('users') ? 'bg-blue-500' :
+      icon.includes('cart') ? 'bg-emerald-500' :
+        icon.includes('dollar') ? 'bg-amber-500' :
+          'bg-rose-500'
+      }`}>
+      <i className={`${icon} text-2xl text-white`}></i>
     </div>
-    <div>
-      <p className="text-sm text-gray-500">{title}</p>
-      {loading ? (
-        <div className="h-8 w-24 bg-gray-200 animate-pulse rounded mt-1"></div>
-      ) : (
-        <p className="text-2xl font-bold text-gray-800">{value}</p>
-      )}
-    </div>
+    {/* Título */}
+    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{title}</p>
+    {/* Valor */}
+    {loading ? (
+      <div className="h-7 w-24 bg-gray-200 animate-pulse rounded"></div>
+    ) : (
+      <p className="text-xl font-bold text-gray-800 leading-tight break-all">{value}</p>
+    )}
   </div>
 );
 
@@ -111,42 +114,50 @@ const Dashboard: React.FC = () => {
   }, [salesData]);
 
   const clearFilters = () => {
-    setStartDate('');
-    setEndDate('');
+    const date = new Date();
+    setStartDate(new Date(date.getFullYear(), date.getMonth(), 1).toISOString().split('T')[0]);
+    setEndDate(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Header + Filtros */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <h1 className="text-3xl font-bold text-gray-800">Dashboard</h1>
 
-        <FilterBar onClearFilters={clearFilters}>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Período:</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white text-sm"
-            />
-            <span className="text-gray-400">-</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="p-2 border border-gray-300 rounded-md shadow-sm focus:ring-orange-500 focus:border-orange-500 bg-white text-sm"
-            />
-          </div>
-        </FilterBar>
+        {/* Filtros redesenhados */}
+        <div className="flex items-center gap-2 bg-gray-50 px-4 py-2 rounded-lg">
+          <i className="fas fa-calendar text-gray-400"></i>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="bg-transparent border-0 text-sm focus:ring-0 p-1"
+          />
+          <span className="text-gray-400">→</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="bg-transparent border-0 text-sm focus:ring-0 p-1"
+          />
+          <button
+            onClick={clearFilters}
+            className="ml-2 px-2 py-1 text-gray-500 hover:bg-gray-200 rounded text-sm transition-colors"
+          >
+            <i className="fas fa-times"></i>
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* KPIs - Layout com ícone no topo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Total de Clientes"
           value={stats?.totalClients.toLocaleString('pt-BR') || '0'}

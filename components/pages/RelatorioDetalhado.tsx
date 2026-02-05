@@ -218,12 +218,20 @@ const RelatorioDetalhado: React.FC = () => {
         [expenses]
     );
 
-    // Novas métricas: Despesas por pedido e Valor Líquido
+    // Novas métricas: Despesas por pedido, Compras e Valor Líquido
     const orderExpensesTotal = useMemo(
         () => filteredSales.reduce((sum, sale) => sum + ((sale as any).expenses || 0), 0),
         [filteredSales]
     );
-    const netValue = totalSales - orderExpensesTotal;
+
+    // Total de compras de botijões (preço × quantidade)
+    const purchasesTotal = useMemo(
+        () => (reportData as any)?.purchasesTotal ?? 0,
+        [reportData]
+    );
+
+    // Valor Líquido = Faturamento Bruto - Despesas (pedidos) - Compras
+    const netValue = totalSales - orderExpensesTotal - purchasesTotal;
 
     // Nome do cliente selecionado para exibição
     const selectedClientName = clientFilter !== 'Todos' ? clientFilter : null;
@@ -814,102 +822,138 @@ const RelatorioDetalhado: React.FC = () => {
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                    <div>
-                        <label className="text-sm font-medium text-gray-600 block mb-1">Data inicial</label>
+            {/* Filtros - Layout reorganizado em duas linhas */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                {/* Primeira linha: Período */}
+                <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg flex-1">
+                        <i className="fas fa-calendar text-gray-400"></i>
                         <input
                             type="date"
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700"
+                            className="bg-transparent border-0 text-sm focus:ring-0 p-1 flex-1"
                             value={startDate}
                             max={endDate}
                             onChange={(event) => setStartDate(event.target.value)}
                         />
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium text-gray-600 block mb-1">Data final</label>
+                        <span className="text-gray-400">→</span>
                         <input
                             type="date"
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700"
+                            className="bg-transparent border-0 text-sm focus:ring-0 p-1 flex-1"
                             value={endDate}
                             min={startDate}
                             onChange={(event) => setEndDate(event.target.value)}
                         />
                     </div>
-                    <div>
-                        <label className="text-sm font-medium text-gray-600 block mb-1">Tipo de Pagamento</label>
-                        <select
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white"
-                            value={paymentMethodFilter}
-                            onChange={(e) => setPaymentMethodFilter(e.target.value)}
-                        >
-                            {paymentMethods.map(method => (
-                                <option key={method} value={method}>{method}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div>
-                        <label className="text-sm font-medium text-gray-600 block mb-1">Cliente</label>
-                        <select
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-700 bg-white"
-                            value={clientFilter}
-                            onChange={(e) => setClientFilter(e.target.value)}
-                        >
-                            <option value="Todos">Todos os Clientes</option>
-                            {clients.map(client => (
-                                <option key={client.id} value={client.name}>{client.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="flex flex-col justify-center">
-                        <p className="text-xs uppercase text-gray-500">Período aplicado</p>
-                        <p className="text-sm font-semibold text-gray-800">{appliedPeriod}</p>
-                    </div>
-                    <div className="flex flex-col justify-center items-start md:items-end text-sm">
+                    <div className="flex items-center gap-2 text-sm">
                         {loading ? (
-                            <span className="flex items-center gap-2 text-gray-500">
+                            <span className="flex items-center gap-2 text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
                                 <i className="fa-solid fa-spinner fa-spin" />
-                                Atualizando dados...
+                                Atualizando...
                             </span>
                         ) : (
-                            <span className="text-gray-500">Última atualização em {metadata.date}</span>
+                            <span className="text-gray-500 bg-gray-50 px-3 py-2 rounded-lg">
+                                <i className="fas fa-check-circle text-green-500 mr-1"></i>
+                                {appliedPeriod}
+                            </span>
                         )}
                     </div>
                 </div>
+
+                {/* Segunda linha: Filtros Dropdown */}
+                <div className="flex flex-wrap items-center gap-2">
+                    <select
+                        className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
+                        value={paymentMethodFilter}
+                        onChange={(e) => setPaymentMethodFilter(e.target.value)}
+                    >
+                        {paymentMethods.map(method => (
+                            <option key={method} value={method}>{method === 'Todos' ? 'Todos os Pagamentos' : method}</option>
+                        ))}
+                    </select>
+
+                    <select
+                        className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
+                        value={clientFilter}
+                        onChange={(e) => setClientFilter(e.target.value)}
+                    >
+                        <option value="Todos">Todos os Clientes</option>
+                        {clients.map(client => (
+                            <option key={client.id} value={client.name}>{client.name}</option>
+                        ))}
+                    </select>
+
+                    <button
+                        onClick={() => { setPaymentMethodFilter('Todos'); setClientFilter('Todos'); }}
+                        className="px-3 py-2 text-gray-500 hover:bg-gray-100 rounded-lg text-sm transition-colors"
+                    >
+                        <i className="fas fa-times mr-1"></i>
+                        Limpar
+                    </button>
+                </div>
+
                 {error && (
-                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mt-3">
                         {error}
                     </div>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div className="bg-white p-4 rounded-xl shadow-sm border">
-                    <p className="text-sm text-gray-500">💰 Faturamento Bruto</p>
-                    <p className="text-2xl font-bold text-green-600 mt-1">{formatCurrency(totalSales)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Valor total das vendas</p>
+            {/* KPIs - Layout com ícone no topo em 2 linhas */}
+            <div className="space-y-4">
+                {/* Primeira Linha: Faturamento, Quantidade, Ticket Médio */}
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-emerald-500">
+                            <i className="fas fa-coins text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Faturamento Bruto</p>
+                        <p className="text-xl font-bold text-emerald-600 leading-tight">{formatCurrency(totalSales)}</p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-blue-500">
+                            <i className="fas fa-box text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Quantidade Total</p>
+                        <p className="text-xl font-bold text-gray-800 leading-tight">{totalQuantity} un</p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-amber-500">
+                            <i className="fas fa-chart-line text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Ticket Médio</p>
+                        <p className="text-xl font-bold text-gray-800 leading-tight">{formatCurrency(averageTicket)}</p>
+                    </div>
                 </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border">
-                    <p className="text-sm text-gray-500">📦 Quantidade Total</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{totalQuantity} un</p>
-                    <p className="text-xs text-gray-400 mt-1">Período: {appliedPeriod}</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border">
-                    <p className="text-sm text-gray-500">💸 Despesas (Pedidos)</p>
-                    <p className="text-2xl font-bold text-red-600 mt-1">- {formatCurrency(orderExpensesTotal)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Frete, combustível, etc.</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-green-200 bg-green-50">
-                    <p className="text-sm text-gray-500">✅ Valor Líquido</p>
-                    <p className={`text-2xl font-bold mt-1 ${netValue >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                        {formatCurrency(netValue)}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">Faturamento - Despesas</p>
-                </div>
-                <div className="bg-white p-4 rounded-xl shadow-sm border">
-                    <p className="text-sm text-gray-500">📊 Ticket Médio</p>
-                    <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(averageTicket)}</p>
-                    <p className="text-xs text-gray-400 mt-1">Por unidade vendida</p>
+
+                {/* Segunda Linha: Despesas, Compras, Valor Líquido */}
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-rose-500">
+                            <i className="fas fa-receipt text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Despesas (Pedidos)</p>
+                        <p className="text-xl font-bold text-rose-600 leading-tight">- {formatCurrency(orderExpensesTotal)}</p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-orange-500">
+                            <i className="fas fa-shopping-cart text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Compras (Botijões)</p>
+                        <p className="text-xl font-bold text-orange-600 leading-tight">- {formatCurrency(purchasesTotal)}</p>
+                    </div>
+
+                    <div className="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow bg-emerald-50">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-emerald-600">
+                            <i className="fas fa-check-circle text-2xl text-white"></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Valor Líquido</p>
+                        <p className={`text-xl font-bold leading-tight ${netValue >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                            {formatCurrency(netValue)}
+                        </p>
+                    </div>
                 </div>
             </div>
 

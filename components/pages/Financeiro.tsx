@@ -75,15 +75,16 @@ const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('pt-BR');
 };
 
-const KPICard: React.FC<{ title: string; value: string; icon: string; color: string }> = ({ title, value, icon, color }) => (
-    <div className="bg-white p-6 rounded-lg shadow-sm flex items-center">
-        <div className={`p-3 rounded-full mr-4 flex items-center justify-center w-12 h-12 ${color}`}>
-            <i className={`${icon} text-xl text-white`}></i>
+const KPICard: React.FC<{ title: string; value: string; icon: string; color: string; trend?: 'up' | 'down' }> = ({ title, value, icon, color, trend }) => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+        {/* Ícone no topo */}
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${color}`}>
+            <i className={`${icon} text-2xl text-white`}></i>
         </div>
-        <div>
-            <p className="text-sm text-gray-500">{title}</p>
-            <p className="text-2xl font-bold text-gray-800">{value}</p>
-        </div>
+        {/* Título */}
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">{title}</p>
+        {/* Valor */}
+        <p className="text-xl font-bold text-gray-800 leading-tight">{value}</p>
     </div>
 );
 
@@ -508,22 +509,22 @@ const Financeiro: React.FC = () => {
             <div className="space-y-6">
                 <PageHeader title="Gestão Financeira" />
 
-                {/* KPIs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPIs - Layout com ícone no topo */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <KPICard
                         title="Total de Receitas"
                         value={formatCurrency(summary?.total_revenue || 0)}
                         icon="fas fa-arrow-up"
-                        color="bg-green-500"
+                        color="bg-emerald-500"
                     />
                     <KPICard
                         title="Total de Despesas"
                         value={formatCurrency(summary?.total_expenses || 0)}
                         icon="fas fa-arrow-down"
-                        color="bg-red-500"
+                        color="bg-rose-500"
                     />
                     <KPICard
-                        title="Saldo"
+                        title="Saldo Atual"
                         value={formatCurrency(summary?.balance || 0)}
                         icon="fas fa-wallet"
                         color="bg-blue-500"
@@ -532,50 +533,48 @@ const Financeiro: React.FC = () => {
                         title="A Receber"
                         value={formatCurrency(summary?.pending_revenue || 0)}
                         icon="fas fa-clock"
-                        color="bg-yellow-500"
+                        color="bg-amber-500"
                     />
                 </div>
 
-                {/* Filtros */}
-                <div className="flex justify-between items-center">
-                    <FilterBar onClearFilters={clearFilters}>
-                        <input
-                            type="text"
-                            placeholder="Buscar transação..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="p-2 border border-gray-300 rounded-md mr-4"
-                        />
-
-                        <div className="flex items-center space-x-2 col-span-1 md:col-span-2">
+                {/* Filtros - Layout reorganizado em duas linhas */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+                    {/* Primeira linha: Busca e Período */}
+                    <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                        <div className="relative flex-1">
+                            <i className="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input
+                                type="text"
+                                placeholder="Buscar transação..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-lg">
+                            <i className="fas fa-calendar text-gray-400"></i>
                             <input
                                 type="date"
                                 value={dateRange.start}
                                 onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                                className="p-2 border border-gray-300 rounded-md"
-                                title="Data Inicial"
+                                className="bg-transparent border-0 text-sm focus:ring-0 p-1"
                             />
-                            <span className="text-gray-500">até</span>
+                            <span className="text-gray-400">→</span>
                             <input
                                 type="date"
                                 value={dateRange.end}
                                 onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                                className="p-2 border border-gray-300 rounded-md"
-                                title="Data Final"
+                                className="bg-transparent border-0 text-sm focus:ring-0 p-1"
                             />
-                            <button
-                                onClick={showAllTransactions}
-                                className="p-2 text-blue-600 hover:text-blue-800 text-sm"
-                                title="Ver todas as datas"
-                            >
-                                <i className="fas fa-calendar-alt"></i> Ver Todas
-                            </button>
                         </div>
+                    </div>
 
+                    {/* Segunda linha: Filtros Dropdown + Ações */}
+                    <div className="flex flex-wrap items-center gap-2">
                         <select
                             value={typeFilter}
                             onChange={(e) => setTypeFilter(e.target.value)}
-                            className="p-2 border border-gray-300 rounded-md"
+                            className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="Todos">Todos os Tipos</option>
                             <option value="Receita">Receitas</option>
@@ -586,7 +585,7 @@ const Financeiro: React.FC = () => {
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
-                            className="p-2 border border-gray-300 rounded-md"
+                            className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="Todos">Todos os Status</option>
                             <option value="Pendente">Pendente</option>
@@ -598,7 +597,7 @@ const Financeiro: React.FC = () => {
                         <select
                             value={categoryFilter}
                             onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="p-2 border border-gray-300 rounded-md"
+                            className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="Todos">Todas as Categorias</option>
                             {Array.from(new Set(categories.map(c => c.id)))
@@ -609,15 +608,35 @@ const Financeiro: React.FC = () => {
                                     </option>
                                 ))}
                         </select>
-                    </FilterBar>
 
-                    <Button
-                        variant="primary"
-                        onClick={() => setIsFormModalOpen(true)}
-                    >
-                        <i className="fas fa-plus mr-2"></i>
-                        Nova Transação
-                    </Button>
+                        <button
+                            onClick={showAllTransactions}
+                            className="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition-colors"
+                        >
+                            <i className="fas fa-calendar-alt mr-1"></i>
+                            Ver Todas
+                        </button>
+
+                        <button
+                            onClick={clearFilters}
+                            className="px-3 py-2 text-gray-500 hover:bg-gray-100 rounded-lg text-sm transition-colors"
+                        >
+                            <i className="fas fa-times mr-1"></i>
+                            Limpar
+                        </button>
+
+                        {/* Botão Nova Transação - Destaque */}
+                        <div className="flex-1 flex justify-end">
+                            <Button
+                                variant="primary"
+                                onClick={() => setIsFormModalOpen(true)}
+                                className="shadow-lg shadow-orange-200"
+                            >
+                                <i className="fas fa-plus mr-2"></i>
+                                Nova Transação
+                            </Button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Tabs */}

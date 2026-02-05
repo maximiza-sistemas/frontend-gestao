@@ -1,4 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { PWAInstallButtonCompact } from './common/PWAInstallButton';
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+}
 
 interface User {
   id: number;
@@ -29,6 +35,45 @@ const menuItems = [
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, user, onLogout }) => {
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    // Check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+      return;
+    }
+
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('appinstalled', () => {
+      setIsInstalled(true);
+      setIsInstallable(false);
+    });
+
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!deferredPrompt) {
+      // Fallback: show instructions for manual installation
+      alert('Para instalar o SISGÁS:\n\n• Chrome/Edge: Clique nos 3 pontos (⋮) → "Instalar SISGÁS"\n• Safari iOS: Toque em Compartilhar → "Adicionar à Tela de Início"');
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setIsInstalled(true);
+    setDeferredPrompt(null);
+    setIsInstallable(false);
+  };
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'Administrador': return 'bg-red-100 text-red-800';
@@ -94,8 +139,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, user, onLo
         </ul>
       </nav>
 
-      {/* Botão de logout fixo no final */}
-      <div className="p-3 border-t bg-white mt-auto">
+      {/* Botões fixos no final */}
+      <div className="p-3 border-t bg-white mt-auto space-y-2">
+        {/* Botão Instalar PWA - sempre visível se não estiver instalado */}
+        {!isInstalled && (
+          <button
+            onClick={handleInstall}
+            className="w-full flex items-center px-3 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all duration-200 shadow-sm"
+          >
+            <i className="fa-solid fa-download fa-fw w-5 h-5 mr-3 text-center flex-shrink-0"></i>
+            <span className="text-sm font-medium">Instalar App</span>
+          </button>
+        )}
+
+        {/* Indicador de app instalado */}
+        {isInstalled && (
+          <div className="flex items-center px-3 py-2.5 bg-green-50 text-green-700 rounded-lg">
+            <i className="fa-solid fa-check-circle fa-fw w-5 h-5 mr-3 text-center flex-shrink-0"></i>
+            <span className="text-sm font-medium">App Instalado ✓</span>
+          </div>
+        )}
+
+        {/* Botão de logout */}
         <button
           onClick={onLogout}
           className="w-full flex items-center px-3 py-2.5 text-gray-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-all duration-200"

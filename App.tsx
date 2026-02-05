@@ -17,6 +17,7 @@ import Fornecedores from './components/pages/Fornecedores';
 import RelatorioDetalhado from './components/pages/RelatorioDetalhado';
 import Configuracoes from './components/pages/Configuracoes';
 import Precos from './components/pages/Precos';
+import PWAInstallButton from './components/common/PWAInstallButton';
 
 // Componente principal da aplicação (após login)
 const MainApp: React.FC = () => {
@@ -61,6 +62,7 @@ const MainApp: React.FC = () => {
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         {renderPage()}
       </main>
+      <PWAInstallButton />
     </div>
   );
 };
