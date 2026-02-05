@@ -2,7 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import api from '../../services/api';
 
-const COLORS = ['#f58220', '#f9a825', '#fbc02d'];
+// Paleta expandida com 10 cores distintas
+const COLORS = [
+  '#f58220', // Laranja principal
+  '#10b981', // Emerald
+  '#3b82f6', // Azul
+  '#ef4444', // Vermelho
+  '#8b5cf6', // Violeta
+  '#f59e0b', // Âmbar
+  '#06b6d4', // Cyan
+  '#ec4899', // Pink
+  '#84cc16', // Lime
+  '#6366f1', // Indigo
+];
 
 interface KPICardProps {
   title: string;
@@ -27,6 +39,17 @@ interface StockDistribution {
   name: string;
   value: number;
 }
+
+// Formatador para eixo Y (1000 -> 1K, 1000000 -> 1M)
+const formatYAxis = (value: number): string => {
+  if (value >= 1000000) {
+    return `${(value / 1000000).toFixed(1)}M`;
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(0)}K`;
+  }
+  return value.toString();
+};
 
 const KPICard: React.FC<KPICardProps> = ({ title, value, icon, loading = false }) => (
   <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
@@ -119,6 +142,9 @@ const Dashboard: React.FC = () => {
     setEndDate(new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().split('T')[0]);
   };
 
+  // Calcular total para porcentagens
+  const stockTotal = stockDistributionData.reduce((sum, item) => sum + item.value, 0);
+
   return (
     <div className="space-y-6">
       {/* Header + Filtros */}
@@ -185,7 +211,8 @@ const Dashboard: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow-sm">
+        {/* Gráfico de Vendas Mensais - Melhorado */}
+        <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Vendas Mensais (Matriz vs. Filial)</h2>
           {loading ? (
             <div className="h-[300px] flex items-center justify-center">
@@ -198,19 +225,34 @@ const Dashboard: React.FC = () => {
           ) : (
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={salesData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" tick={{ fill: '#6B7280' }} />
-                <YAxis tick={{ fill: '#6B7280' }} />
-                <Tooltip formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`} />
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis dataKey="month" tick={{ fill: '#6B7280', fontSize: 12 }} />
+                <YAxis
+                  tick={{ fill: '#6B7280', fontSize: 12 }}
+                  tickFormatter={formatYAxis}
+                  width={60}
+                />
+                <Tooltip
+                  formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, '']}
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                />
                 <Legend />
                 {locationKeys.map((key, index) => (
-                  <Bar key={key} dataKey={key} name={key} fill={COLORS[index % COLORS.length]} radius={[4, 4, 0, 0]} />
+                  <Bar
+                    key={key}
+                    dataKey={key}
+                    name={key}
+                    fill={COLORS[index % COLORS.length]}
+                    radius={[4, 4, 0, 0]}
+                  />
                 ))}
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
-        <div className="bg-white p-6 rounded-lg shadow-sm">
+
+        {/* Gráfico de Distribuição de Estoque - Donut Chart Melhorado */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold text-gray-700 mb-4">Distribuição de Estoque</h2>
           {loading ? (
             <div className="h-[300px] flex items-center justify-center">
@@ -221,27 +263,50 @@ const Dashboard: React.FC = () => {
               Sem dados de estoque disponíveis
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={stockDistributionData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} ${(Number(percent || 0) * 100).toFixed(0)}%`}
-                >
-                  {stockDistributionData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+            <div className="flex flex-col items-center">
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={stockDistributionData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                    dataKey="value"
+                    nameKey="name"
+                  >
+                    {stockDistributionData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number, name: string) => [
+                      `${value.toLocaleString('pt-BR')} un (${stockTotal > 0 ? ((value / stockTotal) * 100).toFixed(1) : 0}%)`,
+                      name
+                    ]}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+
+              {/* Legenda customizada vertical */}
+              <div className="w-full mt-2 max-h-[100px] overflow-y-auto">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {stockDistributionData.map((item, index) => (
+                    <div key={item.name} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                      />
+                      <span className="text-gray-600 truncate" title={item.name}>
+                        {item.name}: {item.value}
+                      </span>
+                    </div>
                   ))}
-                </Pie>
-                <Tooltip formatter={(value: number) => `${value.toLocaleString('pt-BR')} unidades`} />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>
