@@ -141,9 +141,9 @@ export const useOrders = (initialPage = 1, initialLimit = 20) => {
     }
   };
 
-  const deleteOrder = async (id: number) => {
+  const deleteOrder = async (id: number, reason: string) => {
     try {
-      const response = await api.deleteOrder(id);
+      const response = await api.deleteOrder(id, reason);
 
       if (response.success) {
         await fetchOrders();

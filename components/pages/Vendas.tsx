@@ -1229,6 +1229,7 @@ const Vendas: React.FC = () => {
     const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
 
     const [searchTerm, setSearchTerm] = useState('');
+    const [deleteReason, setDeleteReason] = useState('');
     const [statusFilter, setStatusFilter] = useState('Todos');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -1251,6 +1252,7 @@ const Vendas: React.FC = () => {
         setSelectedOrderForPayment(null);
         setIsStatusModalOpen(false);
         setSelectedOrderForStatus(null);
+        setDeleteReason('');
     };
 
     const handleSaveOrder = async (orderData: Omit<Order, 'id'>) => {
@@ -1290,9 +1292,9 @@ const Vendas: React.FC = () => {
     };
 
     const handleConfirmDelete = async () => {
-        if (selectedOrder) {
+        if (selectedOrder && deleteReason.trim().length >= 3) {
             try {
-                const result = await deleteOrder(selectedOrder.id);
+                const result = await deleteOrder(selectedOrder.id, deleteReason.trim());
                 if (result.success) {
                     showMessage('Pedido excluído com sucesso', 'success');
                     handleCloseModals();
@@ -1464,10 +1466,31 @@ const Vendas: React.FC = () => {
                     </div>
                     <p>Tem certeza que deseja excluir permanentemente o pedido <strong>#{selectedOrder?.id}</strong>?</p>
                     <p className="text-sm text-gray-600">Todos os pagamentos e dados associados serão perdidos.</p>
+
+                    <div>
+                        <label htmlFor="delete-reason" className="block text-sm font-medium text-gray-700 mb-1">
+                            Motivo da Exclusão <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            id="delete-reason"
+                            rows={3}
+                            value={deleteReason}
+                            onChange={(e) => setDeleteReason(e.target.value)}
+                            placeholder="Informe o motivo da exclusão (mínimo 3 caracteres)..."
+                            className="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-red-500 focus:border-red-500"
+                        />
+                        {deleteReason.trim().length > 0 && deleteReason.trim().length < 3 && (
+                            <p className="text-xs text-red-500 mt-1">O motivo deve ter no mínimo 3 caracteres</p>
+                        )}
+                    </div>
                 </div>
                 <div className="mt-6 flex justify-end space-x-3">
                     <Button variant="secondary" onClick={handleCloseModals}>Cancelar</Button>
-                    <Button variant="danger" onClick={handleConfirmDelete}>
+                    <Button
+                        variant="danger"
+                        onClick={handleConfirmDelete}
+                        disabled={deleteReason.trim().length < 3}
+                    >
                         <i className="fa-solid fa-trash mr-2"></i>Excluir Permanentemente
                     </Button>
                 </div>

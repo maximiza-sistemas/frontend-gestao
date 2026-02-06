@@ -474,8 +474,11 @@ class ApiService {
     return this.patch(`/orders/${id}/payment-status`, { payment_status });
   }
 
-  async deleteOrder(id: number) {
-    return this.delete(`/orders/${id}`);
+  async deleteOrder(id: number, reason: string) {
+    return this.request(`/orders/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ reason }),
+    });
   }
 
   async getOrderStats() {
