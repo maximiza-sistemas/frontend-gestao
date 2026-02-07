@@ -540,6 +540,32 @@ class ApiService {
     return this.delete(`/orders/${orderId}/payments/${paymentId}`);
   }
 
+  async updateOrderPayment(orderId: number, paymentId: number, paymentData: { amount?: number; payment_method?: string; notes?: string; payment_date?: string; receipt?: File }) {
+    // Se houver arquivo, usar FormData
+    if (paymentData.receipt) {
+      const formData = new FormData();
+      if (paymentData.amount !== undefined) formData.append('amount', paymentData.amount.toString());
+      if (paymentData.payment_method) formData.append('payment_method', paymentData.payment_method);
+      if (paymentData.notes !== undefined) formData.append('notes', paymentData.notes);
+      if (paymentData.payment_date) formData.append('payment_date', paymentData.payment_date);
+      formData.append('receipt', paymentData.receipt);
+
+      const headers: Record<string, string> = {};
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
+
+      const response = await fetch(`${API_BASE_URL}/orders/${orderId}/payments/${paymentId}`, {
+        method: 'PUT',
+        headers,
+        body: formData
+      });
+      return response.json();
+    }
+    // Sem arquivo, usar JSON normal
+    return this.put(`/orders/${orderId}/payments/${paymentId}`, paymentData);
+  }
+
   async getOrderPaymentSummary(orderId: number) {
     return this.get(`/orders/${orderId}/payment-summary`);
   }

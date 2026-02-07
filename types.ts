@@ -316,6 +316,7 @@ export interface OrderPayment {
     notes?: string;
     user_id?: number;
     user_name?: string;
+    receipt_file?: string;
     created_at: string;
 }
 

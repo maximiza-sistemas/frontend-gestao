@@ -37,9 +37,13 @@ interface PaymentModalProps {
     onSave: (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string; receipt?: File }) => void;
     order: any;
     onDiscountUpdate?: () => void;
+    editingPayment?: any;
+    onEditPayment?: (payment: any) => void;
+    onDeletePayment?: (payment: any) => void;
 }
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, order, onDiscountUpdate }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, order, onDiscountUpdate, editingPayment, onEditPayment, onDeletePayment }) => {
+    const isEditing = !!editingPayment;
     const [amount, setAmount] = useState<string>('');
     const [paymentMethod, setPaymentMethod] = useState<'Dinheiro' | 'Pix' | 'Cartão' | 'Transferência' | 'Depósito'>('Dinheiro');
     const [notes, setNotes] = useState('');
@@ -103,24 +107,45 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             const initialDiscount = Number(order?.discount ?? 0);
             setDiscount(initialDiscount.toFixed(2));
             setEditingDiscount(false);
-            const initialPending = Math.max(0, orderTotal - initialDiscount - paidAmount);
-            if (initialPending > 0) {
-                setAmount(initialPending.toFixed(2));
-            }
-            setPaymentMethod('Dinheiro');
-            setSelectedBank('');
-            setPaymentTime(''); // Hora deve ser inserida manualmente
-            setReceiptFile(null);
-            setNotes('');
-        }
-    }, [isOpen, order?.id]);
 
-    // Atualizar o amount quando o pendingAmount muda
+            if (editingPayment) {
+                // Modo edição: preencher com dados existentes
+                setAmount(Number(editingPayment.amount).toFixed(2));
+                setPaymentMethod(editingPayment.payment_method || 'Dinheiro');
+                setPaymentDate(editingPayment.payment_date ? editingPayment.payment_date.split('T')[0] : new Date().toISOString().split('T')[0]);
+                // Extrair banco e hora das notas se existir pattern [Banco às HH:MM]
+                const bankMatch = editingPayment.notes?.match(/^\[([^\]]+?)(?:\s+às\s+(\d{2}:\d{2}))?\]\s*(.*)$/);
+                if (bankMatch) {
+                    setSelectedBank(bankMatch[1] || '');
+                    setPaymentTime(bankMatch[2] || '');
+                    setNotes(bankMatch[3] || '');
+                } else {
+                    setSelectedBank('');
+                    setPaymentTime('');
+                    setNotes(editingPayment.notes || '');
+                }
+                setReceiptFile(null);
+            } else {
+                // Modo criação: valores padrão
+                const initialPending = Math.max(0, orderTotal - initialDiscount - paidAmount);
+                if (initialPending > 0) {
+                    setAmount(initialPending.toFixed(2));
+                }
+                setPaymentMethod('Dinheiro');
+                setSelectedBank('');
+                setPaymentTime('');
+                setReceiptFile(null);
+                setNotes('');
+            }
+        }
+    }, [isOpen, order?.id, editingPayment]);
+
+    // Atualizar o amount quando o pendingAmount muda (somente modo criação)
     useEffect(() => {
-        if (isOpen && pendingAmount > 0 && !editingDiscount) {
+        if (isOpen && pendingAmount > 0 && !editingDiscount && !isEditing) {
             setAmount(pendingAmount.toFixed(2));
         }
-    }, [pendingAmount, isOpen, editingDiscount]);
+    }, [pendingAmount, isOpen, editingDiscount, isEditing]);
 
     if (!isOpen || !order) return null;
 
@@ -172,8 +197,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
             alert('Informe um valor válido');
             return;
         }
-        if (numAmount > pendingAmount) {
-            alert(`Valor máximo: R$ ${pendingAmount.toFixed(2)}`);
+        if (numAmount > pendingAmount + (isEditing ? Number(editingPayment.amount) : 0)) {
+            alert(`Valor máximo: R$ ${(pendingAmount + (isEditing ? Number(editingPayment.amount) : 0)).toFixed(2)}`);
             return;
         }
 
@@ -203,8 +228,8 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg p-6 w-[500px] shadow-xl max-h-[90vh] overflow-y-auto">
                 <h3 className="text-lg font-bold mb-2 text-gray-800">
-                    <i className="fa-solid fa-money-bill-wave text-green-600 mr-2"></i>
-                    Registrar Pagamento
+                    <i className={`fa-solid ${isEditing ? 'fa-pen-to-square text-blue-600' : 'fa-money-bill-wave text-green-600'} mr-2`}></i>
+                    {isEditing ? 'Editar Pagamento' : 'Registrar Pagamento'}
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                     Pedido #{order.id} - <strong>{order.clientName}</strong>
@@ -262,6 +287,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
                                 <input
                                     type="number"
+                                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                     step="0.01"
                                     min="0"
                                     max={orderTotal}
@@ -310,6 +336,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                         <label className="block text-sm font-medium text-gray-700 mb-1">Valor do Pagamento (R$)</label>
                         <input
                             type="number"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
                             step="0.01"
                             min="0.01"
                             max={pendingAmount}
@@ -458,6 +485,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                             <th className="px-2 py-1 text-right">Valor</th>
                                             <th className="px-2 py-1 text-left">Método</th>
                                             <th className="px-2 py-1 text-center">Comprov.</th>
+                                            <th className="px-2 py-1 text-center">Ações</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -485,6 +513,34 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                                                         <span className="text-gray-400">-</span>
                                                     )}
                                                 </td>
+                                                <td className="px-2 py-1 text-center">
+                                                    <div className="flex gap-1 justify-center">
+                                                        {onEditPayment && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => onEditPayment(payment)}
+                                                                className="text-blue-600 hover:text-blue-800 p-0.5"
+                                                                title="Editar pagamento"
+                                                            >
+                                                                <i className="fa-solid fa-pen-to-square text-xs"></i>
+                                                            </button>
+                                                        )}
+                                                        {onDeletePayment && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    if (confirm('Deseja realmente excluir este pagamento?')) {
+                                                                        onDeletePayment(payment);
+                                                                    }
+                                                                }}
+                                                                className="text-red-500 hover:text-red-700 p-0.5"
+                                                                title="Excluir pagamento"
+                                                            >
+                                                                <i className="fa-solid fa-trash text-xs"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -509,11 +565,13 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={loading || pendingAmount <= 0}
-                        className="px-4 py-2 text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50"
+                        disabled={loading || (!isEditing && pendingAmount <= 0)}
+                        className={`px-4 py-2 text-white rounded-md disabled:opacity-50 ${isEditing ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
                     >
                         {loading ? (
                             <><i className="fa-solid fa-spinner fa-spin mr-2"></i>Salvando...</>
+                        ) : isEditing ? (
+                            <>✏️ Salvar Alterações</>
                         ) : (
                             <>💰 Confirmar Pagamento</>
                         )}
@@ -528,9 +586,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, onSave, or
 interface OrderDetailsContentProps {
     order: Order;
     onClose: () => void;
+    onEditPayment?: (payment: any) => void;
+    onDeletePayment?: (payment: any) => void;
 }
 
-const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClose }) => {
+const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClose, onEditPayment, onDeletePayment }) => {
     const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
     const [loadingHistory, setLoadingHistory] = useState(true);
 
@@ -638,6 +698,7 @@ const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClos
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Método</th>
                                     <th className="px-3 py-2 text-left font-medium text-gray-700">Observações</th>
                                     <th className="px-3 py-2 text-center font-medium text-gray-700">Comprovante</th>
+                                    <th className="px-3 py-2 text-center font-medium text-gray-700">Ações</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
@@ -685,6 +746,32 @@ const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClos
                                                 <span className="text-gray-400">-</span>
                                             )}
                                         </td>
+                                        <td className="px-3 py-2 text-center">
+                                            <div className="flex gap-1 justify-center">
+                                                {onEditPayment && (
+                                                    <button
+                                                        onClick={() => onEditPayment(payment)}
+                                                        className="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-50"
+                                                        title="Editar pagamento"
+                                                    >
+                                                        <i className="fa-solid fa-pen-to-square text-sm"></i>
+                                                    </button>
+                                                )}
+                                                {onDeletePayment && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (confirm('Deseja realmente excluir este pagamento?')) {
+                                                                onDeletePayment(payment);
+                                                            }
+                                                        }}
+                                                        className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50"
+                                                        title="Excluir pagamento"
+                                                    >
+                                                        <i className="fa-solid fa-trash text-sm"></i>
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -694,7 +781,7 @@ const OrderDetailsContent: React.FC<OrderDetailsContentProps> = ({ order, onClos
                                     <td className="px-3 py-2 text-right font-bold text-green-700">
                                         {paymentHistory.reduce((sum, p) => sum + Number(p.amount), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                                     </td>
-                                    <td colSpan={3}></td>
+                                    <td colSpan={4}></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1225,6 +1312,7 @@ const Vendas: React.FC = () => {
     const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [selectedOrderForPayment, setSelectedOrderForPayment] = useState<Order | null>(null);
+    const [editingPayment, setEditingPayment] = useState<any>(null);
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<Order | null>(null);
 
@@ -1250,6 +1338,7 @@ const Vendas: React.FC = () => {
         setSelectedOrder(null);
         setIsPaymentModalOpen(false);
         setSelectedOrderForPayment(null);
+        setEditingPayment(null);
         setIsStatusModalOpen(false);
         setSelectedOrderForStatus(null);
         setDeleteReason('');
@@ -1345,6 +1434,45 @@ const Vendas: React.FC = () => {
         }
     };
 
+    const handlePaymentEdit = (payment: any) => {
+        setEditingPayment(payment);
+        setIsPaymentModalOpen(true); // Reopen modal for editing
+    };
+
+    const handlePaymentEditSave = async (paymentData: { amount: number; payment_method: string; notes?: string; payment_date?: string; receipt?: File }) => {
+        if (!selectedOrderForPayment || !editingPayment) return;
+
+        try {
+            const response = await api.updateOrderPayment(selectedOrderForPayment.id, editingPayment.id, paymentData);
+            if (response.success) {
+                showMessage('Pagamento atualizado com sucesso!', 'success');
+                refetchOrders();
+                handleCloseModals();
+            } else {
+                showMessage(response.error || 'Erro ao atualizar pagamento', 'error');
+            }
+        } catch (error) {
+            showMessage('Erro de conexão ao atualizar pagamento', 'error');
+        }
+    };
+
+    const handlePaymentDeleteFromModal = async (payment: any) => {
+        if (!selectedOrderForPayment) return;
+
+        try {
+            const response = await api.deleteOrderPayment(selectedOrderForPayment.id, payment.id);
+            if (response.success) {
+                showMessage('Pagamento excluído com sucesso!', 'success');
+                refetchOrders();
+                handleCloseModals();
+            } else {
+                showMessage(response.error || 'Erro ao excluir pagamento', 'error');
+            }
+        } catch (error) {
+            showMessage('Erro de conexão ao excluir pagamento', 'error');
+        }
+    };
+
 
     const handleOrderStatusClick = (order: Order) => {
         setSelectedOrderForStatus(order);
@@ -1424,7 +1552,31 @@ const Vendas: React.FC = () => {
                 size="lg"
             >
                 {selectedOrder &&
-                    <OrderDetailsContent order={selectedOrder} onClose={handleCloseModals} />
+                    <OrderDetailsContent
+                        order={selectedOrder}
+                        onClose={handleCloseModals}
+                        onEditPayment={(payment) => {
+                            // Fechar modal de detalhes e abrir PaymentModal em modo edição
+                            setSelectedOrderForPayment(selectedOrder);
+                            setEditingPayment(payment);
+                            setModalState(null);
+                            setIsPaymentModalOpen(true);
+                        }}
+                        onDeletePayment={async (payment) => {
+                            try {
+                                const response = await api.deleteOrderPayment(selectedOrder.id, payment.id);
+                                if (response.success) {
+                                    showMessage('Pagamento excluído com sucesso!', 'success');
+                                    refetchOrders();
+                                    handleCloseModals();
+                                } else {
+                                    showMessage(response.error || 'Erro ao excluir pagamento', 'error');
+                                }
+                            } catch (error) {
+                                showMessage('Erro de conexão ao excluir pagamento', 'error');
+                            }
+                        }}
+                    />
                 }
             </Modal>
 
@@ -1716,10 +1868,13 @@ const Vendas: React.FC = () => {
             {selectedOrderForPayment && (
                 <PaymentModal
                     isOpen={isPaymentModalOpen}
-                    onClose={() => setIsPaymentModalOpen(false)}
-                    onSave={handlePaymentSave}
+                    onClose={() => { setIsPaymentModalOpen(false); setEditingPayment(null); }}
+                    onSave={editingPayment ? handlePaymentEditSave : handlePaymentSave}
                     order={selectedOrderForPayment}
                     onDiscountUpdate={refetchOrders}
+                    editingPayment={editingPayment}
+                    onEditPayment={handlePaymentEdit}
+                    onDeletePayment={handlePaymentDeleteFromModal}
                 />
             )}
 
