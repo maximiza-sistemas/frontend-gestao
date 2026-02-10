@@ -230,8 +230,15 @@ const RelatorioDetalhado: React.FC = () => {
         [reportData]
     );
 
-    // Valor Líquido = Faturamento Bruto - Despesas (pedidos) - Compras
-    const netValue = totalSales - orderExpensesTotal - purchasesTotal;
+
+    // Total recebido (pagamentos realizados pelos clientes)
+    const totalReceived = useMemo(
+        () => filteredReceivements.reduce((sum, item) => sum + (item.received ?? item.amount), 0),
+        [filteredReceivements]
+    );
+
+    // Saldo a Receber = Faturamento Bruto - Total Recebido
+    const saldoAReceber = totalSales - totalReceived;
 
     // Nome do cliente selecionado para exibição
     const selectedClientName = clientFilter !== 'Todos' ? clientFilter : null;
@@ -264,6 +271,15 @@ const RelatorioDetalhado: React.FC = () => {
         doc.text(`Unidade: ${metadata.unit} · ${metadata.city}`, 40, 80);
         doc.text(`Emitido em: ${metadata.date}`, 40, 95);
         doc.text(`Preparado por: ${metadata.preparedBy}`, 40, 110);
+        let pdfHeaderY = 110;
+        if (clientFilter !== 'Todos') {
+            pdfHeaderY += 15;
+            doc.text(`Cliente: ${clientFilter}`, 40, pdfHeaderY);
+        }
+        if (paymentMethodFilter !== 'Todos') {
+            pdfHeaderY += 15;
+            doc.text(`Pagamento: ${paymentMethodFilter}`, 40, pdfHeaderY);
+        }
 
         const addTable = (
             title: string,
@@ -301,10 +317,10 @@ const RelatorioDetalhado: React.FC = () => {
         };
 
         addTable(
-            'Vendas',
+            `Vendas${clientFilter !== 'Todos' ? ` (${clientFilter})` : ''}`,
             ['Cliente', 'Cidade', 'Produto', 'Data', 'Situação', 'Qtd.', 'Total', 'P. Unitário'],
             [
-                ...sales.map((sale) => [
+                ...filteredSales.map((sale) => [
                     sale.client,
                     sale.city,
                     sale.product,
@@ -330,7 +346,7 @@ const RelatorioDetalhado: React.FC = () => {
         addTable(
             'Produtos',
             ['Produto', 'Quantidade', 'P. Médio', 'Total'],
-            productSummary.map((item) => [
+            filteredProductSummary.map((item) => [
                 item.product,
                 item.quantity,
                 formatCurrency(item.averagePrice),
@@ -338,7 +354,7 @@ const RelatorioDetalhado: React.FC = () => {
             ])
         );
 
-        const financeBody = paymentBreakdown.map((item) => {
+        const financeBody = filteredPaymentBreakdown.map((item) => {
             const percentage = paymentTotal ? (item.amount / paymentTotal) * 100 : 0;
             return [
                 item.method,
@@ -349,14 +365,14 @@ const RelatorioDetalhado: React.FC = () => {
         });
         financeBody.push([
             'Total',
-            paymentBreakdown.reduce((sum, item) => sum + item.quantity, 0),
+            filteredPaymentBreakdown.reduce((sum, item) => sum + item.quantity, 0),
             formatCurrency(paymentTotal),
             '100%',
         ]);
         addTable('Financeiro', ['Forma', 'Quantidade', 'Total', '%'], financeBody);
 
-        const receivementRows = (receivements.length
-            ? receivements
+        const receivementRows = (filteredReceivements.length
+            ? filteredReceivements
             : [
                 {
                     code: '-',
@@ -374,12 +390,12 @@ const RelatorioDetalhado: React.FC = () => {
                 formatCurrency(item.amount),
                 formatCurrency(item.received ?? item.amount),
             ]);
-        if (receivements.length) {
-            const receivedSum = receivements.reduce(
+        if (filteredReceivements.length) {
+            const receivedSum = filteredReceivements.reduce(
                 (sum, item) => sum + (item.received ?? item.amount),
                 0
             );
-            const billedSum = receivements.reduce((sum, item) => sum + item.amount, 0);
+            const billedSum = filteredReceivements.reduce((sum, item) => sum + item.amount, 0);
             receivementRows.push([
                 'Total',
                 '',
@@ -390,16 +406,15 @@ const RelatorioDetalhado: React.FC = () => {
             ]);
         }
         addTable(
-            'Recebimentos',
+            `Recebimentos${paymentMethodFilter !== 'Todos' ? ` (${paymentMethodFilter})` : ''}`,
             ['Código', 'Cliente', 'Forma', 'Documento', 'Valor', 'Recebido'],
             receivementRows
         );
 
 
-
-        const summaryQty = receivementSummary.reduce((sum, item) => sum + item.quantity, 0);
-        const summaryValue = receivementSummary.reduce((sum, item) => sum + item.amount, 0);
-        const summaryRows = receivementSummary.map((item) => [
+        const summaryQty = filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.quantity, 0);
+        const summaryValue = filteredReceivementSummaryByClient.reduce((sum, item) => sum + item.amount, 0);
+        const summaryRows = filteredReceivementSummaryByClient.map((item) => [
             item.method,
             item.quantity,
             formatCurrency(item.amount),
@@ -421,15 +436,30 @@ const RelatorioDetalhado: React.FC = () => {
             ]
         );
 
-        const generalQty = generalDetail.reduce((sum, item) => sum + item.quantity, 0);
-        const generalValue = generalDetail.reduce((sum, item) => sum + item.amount, 0);
-        const generalRows = generalDetail.map((item) => [
+        const generalQty = filteredGeneralDetail.reduce((sum, item) => sum + item.quantity, 0);
+        const generalValue = filteredGeneralDetail.reduce((sum, item) => sum + item.amount, 0);
+        const generalRows = filteredGeneralDetail.map((item) => [
             item.method,
             item.quantity,
             formatCurrency(item.amount),
         ]);
         generalRows.push(['Total', generalQty, formatCurrency(generalValue)]);
         addTable('Detalhamento Geral', ['Forma', 'Quantidade', 'Total'], generalRows);
+
+        // Resumo Financeiro (KPIs)
+        addTable(
+            'Resumo Financeiro',
+            ['Indicador', 'Valor'],
+            [
+                ['Faturamento Bruto', formatCurrency(totalSales)],
+                ['Quantidade Total', `${totalQuantity} un`],
+                ['Ticket Médio', formatCurrency(averageTicket)],
+                ['Despesas (Pedidos)', `- ${formatCurrency(orderExpensesTotal)}`],
+                ['Compras (Botijões)', `- ${formatCurrency(purchasesTotal)}`],
+                ['Valores Pagos', formatCurrency(totalReceived)],
+                ['Saldo a Receber', formatCurrency(saldoAReceber)],
+            ]
+        );
 
         doc.save(`relatorio-detalhado-${metadata.date.replace(/\//g, '-')}.pdf`);
     };
@@ -558,9 +588,14 @@ const RelatorioDetalhado: React.FC = () => {
                         <div class="value red">- ${formatCurrency(orderExpensesTotal)}</div>
                     </div>
                     <div class="summary-card">
-                        <div class="label">✅ Valor Líquido</div>
-                        <div class="value ${netValue >= 0 ? 'green' : 'red'}">${formatCurrency(netValue)}</div>
+                        <div class="label">💵 Valores Pagos</div>
+                        <div class="value green">${formatCurrency(totalReceived)}</div>
                     </div>
+                    <div class="summary-card">
+                        <div class="label">⏳ Saldo a Receber</div>
+                        <div class="value ${saldoAReceber > 0 ? 'orange' : 'green'}">${formatCurrency(saldoAReceber)}</div>
+                    </div>
+
                     <div class="summary-card">
                         <div class="label">📊 Ticket Médio</div>
                         <div class="value">${formatCurrency(averageTicket)}</div>
@@ -606,7 +641,7 @@ const RelatorioDetalhado: React.FC = () => {
                                 <td class="right">${totalQuantity}</td>
                                 <td class="right green">${formatCurrency(totalSales)}</td>
                                 <td class="right red">${orderExpensesTotal > 0 ? '- ' + formatCurrency(orderExpensesTotal) : '-'}</td>
-                                <td class="right">${formatCurrency(netValue)}</td>
+                                <td class="right">${formatCurrency(averageTicket)}</td>
                             </tr>` : ''}
                         </tbody>
                     </table>
@@ -774,6 +809,27 @@ const RelatorioDetalhado: React.FC = () => {
                     </table>
                 </section>
 
+                <section>
+                    <h2>Resumo Financeiro</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Indicador</th>
+                                <th class="right">Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Faturamento Bruto</td><td class="right green">${formatCurrency(totalSales)}</td></tr>
+                            <tr><td>Quantidade Total</td><td class="right">${totalQuantity} un</td></tr>
+                            <tr><td>Ticket Médio</td><td class="right">${formatCurrency(averageTicket)}</td></tr>
+                            <tr><td>Despesas (Pedidos)</td><td class="right red">- ${formatCurrency(orderExpensesTotal)}</td></tr>
+                            <tr><td>Compras (Botijões)</td><td class="right red">- ${formatCurrency(purchasesTotal)}</td></tr>
+                            <tr class="total"><td>Valores Pagos</td><td class="right green">${formatCurrency(totalReceived)}</td></tr>
+                            <tr class="total"><td>Saldo a Receber</td><td class="right ${saldoAReceber > 0 ? 'orange' : 'green'}">${formatCurrency(saldoAReceber)}</td></tr>
+                        </tbody>
+                    </table>
+                </section>
+
                 <div class="footer">
                     <p>SISGÁS - Sistema de Gestão de Distribuidora de Gás</p>
                     <p>Relatório gerado em ${metadata.date}</p>
@@ -927,8 +983,8 @@ const RelatorioDetalhado: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Segunda Linha: Despesas, Compras, Valor Líquido */}
-                <div className="grid grid-cols-3 gap-4">
+                {/* Segunda Linha: Despesas, Compras, Valores Pagos, Saldo a Receber */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
                         <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-rose-500">
                             <i className="fas fa-receipt text-2xl text-white"></i>
@@ -945,13 +1001,21 @@ const RelatorioDetalhado: React.FC = () => {
                         <p className="text-xl font-bold text-orange-600 leading-tight">- {formatCurrency(purchasesTotal)}</p>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow bg-emerald-50">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-emerald-600">
-                            <i className="fas fa-check-circle text-2xl text-white"></i>
+                    <div className="bg-white rounded-xl shadow-sm border border-blue-200 bg-blue-50 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-blue-500">
+                            <i className="fas fa-hand-holding-usd text-2xl text-white"></i>
                         </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Valor Líquido</p>
-                        <p className={`text-xl font-bold leading-tight ${netValue >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
-                            {formatCurrency(netValue)}
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Valores Pagos</p>
+                        <p className="text-xl font-bold text-blue-600 leading-tight">{formatCurrency(totalReceived)}</p>
+                    </div>
+
+                    <div className={`bg-white rounded-xl shadow-sm border p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow ${saldoAReceber > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${saldoAReceber > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                            <i className={`fas ${saldoAReceber > 0 ? 'fa-clock' : 'fa-check-double'} text-2xl text-white`}></i>
+                        </div>
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Saldo a Receber</p>
+                        <p className={`text-xl font-bold leading-tight ${saldoAReceber > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {formatCurrency(saldoAReceber)}
                         </p>
                     </div>
                 </div>
@@ -1020,7 +1084,7 @@ const RelatorioDetalhado: React.FC = () => {
                                     <td className="px-4 py-3 text-right text-red-600">
                                         {orderExpensesTotal > 0 ? `- ${formatCurrency(orderExpensesTotal)}` : '-'}
                                     </td>
-                                    <td className="px-4 py-3 text-right">{formatCurrency(netValue)}</td>
+                                    <td className="px-4 py-3 text-right">{formatCurrency(averageTicket)}</td>
                                 </tr>
                             )}
                         </tbody>
