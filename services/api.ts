@@ -333,6 +333,8 @@ class ApiService {
     purchase_date?: string;
     is_term?: boolean;
     payment_date?: string;
+    due_date?: string;
+    invoice_number?: string;
     location_id?: number;
     notes?: string;
   }) {

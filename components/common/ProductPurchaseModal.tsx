@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../../services/api';
 import Toast from './Toast';
 
@@ -73,11 +73,17 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         unit_price: '',
         quantity: '1',
         purchase_date: getLocalDateString(),
-        is_term: false, // A prazo
-        payment_date: '', // Data que o pagamento foi realizado (para compras a prazo)
-        location_id: '', // Empresa que realizou a compra
+        is_term: false,
+        payment_date: '',
+        due_date: '',
+        invoice_number: '',
+        location_id: '',
         notes: ''
     });
+
+    // Date filter state for history
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
 
     // Installments state
     const [selectedPurchase, setSelectedPurchase] = useState<ProductPurchase | null>(null);
@@ -152,6 +158,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 purchase_date: formData.purchase_date,
                 is_term: formData.is_term,
                 payment_date: formData.is_term && formData.payment_date ? formData.payment_date : undefined,
+                due_date: formData.is_term && formData.due_date ? formData.due_date : undefined,
+                invoice_number: formData.invoice_number || undefined,
                 location_id: formData.location_id ? Number(formData.location_id) : undefined,
                 notes: formData.notes || undefined
             });
@@ -164,6 +172,8 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                     purchase_date: getLocalDateString(),
                     is_term: false,
                     payment_date: '',
+                    due_date: '',
+                    invoice_number: '',
                     location_id: '',
                     notes: ''
                 });
@@ -249,6 +259,68 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     };
 
     const calculatedTotal = Number(formData.unit_price || 0) * Number(formData.quantity || 0);
+
+    const filteredPurchases = useMemo(() => {
+        return purchases.filter(p => {
+            const purchaseDate = p.purchase_date.split('T')[0];
+            if (filterDateFrom && purchaseDate < filterDateFrom) return false;
+            if (filterDateTo && purchaseDate > filterDateTo) return false;
+            return true;
+        });
+    }, [purchases, filterDateFrom, filterDateTo]);
+
+    const handleExportPDF = () => {
+        const jsPdfFactory = (window as any).jspdf?.jsPDF;
+        if (!jsPdfFactory) {
+            showMessage('Biblioteca PDF não carregada. Tente recarregar a página.', 'error');
+            return;
+        }
+
+        const doc = new jsPdfFactory({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const docAny = doc as any;
+
+        doc.setFontSize(16);
+        doc.text(`Histórico de Compras - ${product?.name || ''}`, 14, 20);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`, 14, 28);
+        doc.text(`Total de registros: ${filteredPurchases.length}`, 14, 34);
+
+        const totalGeral = filteredPurchases.reduce((sum, p) => sum + p.total_amount, 0);
+        doc.text(`Valor total: R$ ${totalGeral.toFixed(2)}`, 14, 40);
+
+        if (filterDateFrom || filterDateTo) {
+            const periodoText = `Período: ${filterDateFrom ? formatDateString(filterDateFrom) : 'início'} a ${filterDateTo ? formatDateString(filterDateTo) : 'atual'}`;
+            doc.text(periodoText, 14, 46);
+        }
+
+        doc.setTextColor(0);
+
+        const tableData = filteredPurchases.map((p) => [
+            formatDateString(p.purchase_date),
+            (p as any).location_name || '-',
+            `R$ ${p.unit_price.toFixed(2)}`,
+            p.quantity.toString(),
+            `R$ ${p.total_amount.toFixed(2)}`,
+            (p as any).due_date ? formatDateString((p as any).due_date) : '-',
+            (p as any).invoice_number || '-',
+            (p as any).is_term
+                ? ((p as any).payment_date ? `Pago em ${formatDateString((p as any).payment_date)}` : 'A Prazo - Pendente')
+                : 'À Vista'
+        ]);
+
+        docAny.autoTable({
+            head: [['Data', 'Empresa', 'Preço Unit.', 'Qtd', 'Total', 'Vencimento', 'Nota', 'Status']],
+            body: tableData,
+            startY: (filterDateFrom || filterDateTo) ? 52 : 46,
+            styles: { fontSize: 9, cellPadding: 3 },
+            headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+            alternateRowStyles: { fillColor: [245, 247, 250] },
+        });
+
+        doc.save(`compras_${product?.name?.replace(/\s/g, '_') || 'produto'}_${new Date().toISOString().split('T')[0]}.pdf`);
+        showMessage('PDF exportado com sucesso!', 'success');
+    };
 
     if (!isOpen) return null;
 
@@ -365,20 +437,43 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                         </div>
 
                         {formData.is_term && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
-                                <input
-                                    type="date"
-                                    className="w-full border rounded p-2"
-                                    value={formData.payment_date}
-                                    onChange={e => setFormData({ ...formData, payment_date: e.target.value })}
-                                    onWheel={(e) => e.currentTarget.blur()}
-                                />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    {formData.payment_date ? 'Pagamento já realizado' : 'Deixe em branco se ainda não foi pago'}
-                                </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data de Vencimento</label>
+                                    <input
+                                        type="date"
+                                        className="w-full border rounded p-2"
+                                        value={formData.due_date}
+                                        onChange={e => setFormData({ ...formData, due_date: e.target.value })}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Data do Pagamento</label>
+                                    <input
+                                        type="date"
+                                        className="w-full border rounded p-2"
+                                        value={formData.payment_date}
+                                        onChange={e => setFormData({ ...formData, payment_date: e.target.value })}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {formData.payment_date ? 'Pagamento já realizado' : 'Deixe em branco se ainda não foi pago'}
+                                    </p>
+                                </div>
                             </div>
                         )}
+
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Nº da Nota</label>
+                            <input
+                                type="text"
+                                className="w-full border rounded p-2"
+                                placeholder="Número da nota fiscal..."
+                                value={formData.invoice_number}
+                                onChange={e => setFormData({ ...formData, invoice_number: e.target.value })}
+                            />
+                        </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
@@ -426,66 +521,119 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                 Nenhuma compra registrada
                             </div>
                         ) : (
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
-                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
-                                        <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                    {purchases.map((purchase) => (
-                                        <tr key={purchase.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                {formatDateString(purchase.purchase_date)}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                                {purchase.location_name || '-'}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right">
-                                                R$ {purchase.unit_price.toFixed(2)}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                                                {purchase.quantity}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-sm text-right font-medium">
-                                                R$ {purchase.total_amount.toFixed(2)}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-center">
-                                                {(purchase as any).is_term ? (
-                                                    (purchase as any).payment_date ? (
-                                                        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                            Pago em {formatDateString((purchase as any).payment_date)}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                                                            A Prazo - Pendente
-                                                        </span>
-                                                    )
-                                                ) : (
-                                                    <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                        À Vista
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 whitespace-nowrap text-right">
-                                                <button
-                                                    onClick={() => handleDelete(purchase.id)}
-                                                    className="text-red-600 hover:text-red-800"
-                                                    title="Excluir"
-                                                >
-                                                    <i className="fa-solid fa-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                            <>
+                                <div className="flex flex-wrap items-end gap-3 mb-3 p-3 bg-gray-50 rounded-lg">
+                                    <div className="flex-1 min-w-[140px]">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">De</label>
+                                        <input
+                                            type="date"
+                                            className="w-full border rounded p-1.5 text-sm"
+                                            value={filterDateFrom}
+                                            onChange={e => setFilterDateFrom(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="flex-1 min-w-[140px]">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Até</label>
+                                        <input
+                                            type="date"
+                                            className="w-full border rounded p-1.5 text-sm"
+                                            value={filterDateTo}
+                                            onChange={e => setFilterDateTo(e.target.value)}
+                                        />
+                                    </div>
+                                    {(filterDateFrom || filterDateTo) && (
+                                        <button
+                                            onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); }}
+                                            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 border rounded hover:bg-gray-100 transition-colors"
+                                        >
+                                            <i className="fa-solid fa-times mr-1"></i>
+                                            Limpar
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={handleExportPDF}
+                                        className="flex items-center px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-sm transition-colors"
+                                    >
+                                        <i className="fa-solid fa-file-pdf mr-2"></i>
+                                        PDF
+                                    </button>
+                                </div>
+
+                                {filteredPurchases.length === 0 ? (
+                                    <div className="text-center py-6 text-gray-500">
+                                        Nenhuma compra encontrada no período selecionado
+                                    </div>
+                                ) : (
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Data</th>
+                                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Empresa</th>
+                                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Preço Unit.</th>
+                                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Qtd</th>
+                                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
+                                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vencimento</th>
+                                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nota</th>
+                                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
+                                                <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-200">
+                                            {filteredPurchases.map((purchase) => (
+                                                <tr key={purchase.id} className="hover:bg-gray-50">
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                                                        {formatDateString(purchase.purchase_date)}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                                                        {purchase.location_name || '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm text-right">
+                                                        R$ {purchase.unit_price.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm text-center">
+                                                        {purchase.quantity}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm text-right font-medium">
+                                                        R$ {purchase.total_amount.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                                                        {(purchase as any).due_date ? formatDateString((purchase as any).due_date) : '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-sm">
+                                                        {(purchase as any).invoice_number || '-'}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-center">
+                                                        {(purchase as any).is_term ? (
+                                                            (purchase as any).payment_date ? (
+                                                                <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                                                    Pago em {formatDateString((purchase as any).payment_date)}
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+                                                                    A Prazo - Pendente
+                                                                </span>
+                                                            )
+                                                        ) : (
+                                                            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+                                                                À Vista
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-3 py-3 whitespace-nowrap text-right">
+                                                        <button
+                                                            onClick={() => handleDelete(purchase.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                            title="Excluir"
+                                                        >
+                                                            <i className="fa-solid fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </>
                         )}
                     </div>
                 )}

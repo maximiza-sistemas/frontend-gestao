@@ -1304,7 +1304,7 @@ const OrderForm: React.FC<{
 
 
 const Vendas: React.FC = () => {
-    const { orders, loading, error, pagination, setPage, setLimit, goToNextPage, goToPreviousPage, createOrder, updateOrder, updateOrderStatus, deleteOrder, refetchOrders } = useOrders(1, 20);
+    const { orders, loading, error, pagination, setPage, setLimit, goToNextPage, goToPreviousPage, fetchOrders, createOrder, updateOrder, updateOrderStatus, deleteOrder, refetchOrders } = useOrders(1, 20);
     const [modalState, setModalState] = useState<'form' | 'details' | 'cancel' | 'reopen' | 'delete' | null>(null);
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
     const [showToast, setShowToast] = useState(false);
@@ -1321,6 +1321,28 @@ const Vendas: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState('Todos');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
+    // Busca no backend quando filtros mudam (com debounce para pesquisa)
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const hasFilters = searchTerm || statusFilter !== 'Todos' || startDate || endDate;
+            const params: any = {};
+
+            if (searchTerm) params.search = searchTerm;
+            if (statusFilter !== 'Todos') params.status = statusFilter;
+            if (startDate) params.date_from = startDate;
+            if (endDate) params.date_to = endDate;
+
+            if (hasFilters) {
+                params.limit = 500;
+                params.page = 1;
+            }
+
+            fetchOrders(params);
+        }, searchTerm ? 500 : 0);
+
+        return () => clearTimeout(timer);
+    }, [searchTerm, statusFilter, startDate, endDate]);
 
     const showMessage = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
         setToastMessage(message);
@@ -1499,18 +1521,8 @@ const Vendas: React.FC = () => {
     };
 
     const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
-            const matchesSearch = order.clientName.toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesStatus = statusFilter === 'Todos' || order.status === statusFilter;
-            const orderDate = new Date(order.date);
-            const start = startDate ? new Date(startDate) : null;
-            const end = endDate ? new Date(endDate) : null;
-            if (start) start.setHours(0, 0, 0, 0);
-            if (end) end.setHours(23, 59, 59, 999);
-            const matchesDate = (!start || orderDate >= start) && (!end || orderDate <= end);
-            return matchesSearch && matchesStatus && matchesDate;
-        });
-    }, [orders, searchTerm, statusFilter, startDate, endDate]);
+        return [...orders].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [orders]);
 
     if (loading) {
         return (
