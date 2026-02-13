@@ -47,6 +47,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     const [loading, setLoading] = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [activeTab, setActiveTab] = useState<'form' | 'history'>('form');
+    const [editingPurchaseId, setEditingPurchaseId] = useState<number | null>(null);
 
     // Helper para obter data local no formato YYYY-MM-DD (evita problemas de timezone)
     const getLocalDateString = (date: Date = new Date()) => {
@@ -89,6 +90,7 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
     const [selectedPurchase, setSelectedPurchase] = useState<ProductPurchase | null>(null);
     const [installments, setInstallments] = useState<PurchaseInstallment[]>([]);
     const [showInstallments, setShowInstallments] = useState(false);
+    const [viewingPurchase, setViewingPurchase] = useState<ProductPurchase | null>(null);
 
     // Payment form state
     const [paymentForm, setPaymentForm] = useState({
@@ -146,13 +148,44 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
         }
     };
 
+    const resetForm = () => {
+        setFormData({
+            unit_price: '',
+            quantity: '1',
+            purchase_date: getLocalDateString(),
+            is_term: false,
+            payment_date: '',
+            due_date: '',
+            invoice_number: '',
+            location_id: '',
+            notes: ''
+        });
+        setEditingPurchaseId(null);
+    };
+
+    const handleEdit = (purchase: ProductPurchase) => {
+        setFormData({
+            unit_price: purchase.unit_price.toString(),
+            quantity: purchase.quantity.toString(),
+            purchase_date: purchase.purchase_date.split('T')[0],
+            is_term: (purchase as any).is_term || (purchase as any).is_installment || false,
+            payment_date: (purchase as any).payment_date ? (purchase as any).payment_date.split('T')[0] : '',
+            due_date: (purchase as any).due_date ? (purchase as any).due_date.split('T')[0] : '',
+            invoice_number: (purchase as any).invoice_number || '',
+            location_id: purchase.location_id ? purchase.location_id.toString() : '',
+            notes: purchase.notes || ''
+        });
+        setEditingPurchaseId(purchase.id);
+        setActiveTab('form');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!product || submitting) return;
 
         setSubmitting(true);
         try {
-            const response = await api.createProductPurchase(product.id, {
+            const payload = {
                 unit_price: Number(formData.unit_price),
                 quantity: Number(formData.quantity),
                 purchase_date: formData.purchase_date,
@@ -162,29 +195,23 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 invoice_number: formData.invoice_number || undefined,
                 location_id: formData.location_id ? Number(formData.location_id) : undefined,
                 notes: formData.notes || undefined
-            });
+            };
+
+            const response = editingPurchaseId
+                ? await api.updateProductPurchase(product.id, editingPurchaseId, payload)
+                : await api.createProductPurchase(product.id, payload);
 
             if (response.success) {
-                showMessage('Compra registrada com sucesso', 'success');
-                setFormData({
-                    unit_price: '',
-                    quantity: '1',
-                    purchase_date: getLocalDateString(),
-                    is_term: false,
-                    payment_date: '',
-                    due_date: '',
-                    invoice_number: '',
-                    location_id: '',
-                    notes: ''
-                });
+                showMessage(editingPurchaseId ? 'Compra atualizada com sucesso' : 'Compra registrada com sucesso', 'success');
+                resetForm();
                 fetchPurchases();
                 setActiveTab('history');
             } else {
-                showMessage(response.error || 'Erro ao registrar compra', 'error');
+                showMessage(response.error || 'Erro ao salvar compra', 'error');
             }
         } catch (error) {
-            console.error('Erro ao registrar compra:', error);
-            showMessage('Erro ao registrar compra', 'error');
+            console.error('Erro ao salvar compra:', error);
+            showMessage('Erro ao salvar compra', 'error');
         } finally {
             setSubmitting(false);
         }
@@ -304,13 +331,11 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
             `R$ ${p.total_amount.toFixed(2)}`,
             (p as any).due_date ? formatDateString((p as any).due_date) : '-',
             (p as any).invoice_number || '-',
-            (p as any).is_term
-                ? ((p as any).payment_date ? `Pago em ${formatDateString((p as any).payment_date)}` : 'A Prazo - Pendente')
-                : 'À Vista'
+            p.notes || '-'
         ]);
 
         docAny.autoTable({
-            head: [['Data', 'Empresa', 'Preço Unit.', 'Qtd', 'Total', 'Vencimento', 'Nota', 'Status']],
+            head: [['Data', 'Empresa', 'Preço Unit.', 'Qtd', 'Total', 'Vencimento', 'Nota', 'Obs.']],
             body: tableData,
             startY: (filterDateFrom || filterDateTo) ? 52 : 46,
             styles: { fontSize: 9, cellPadding: 3 },
@@ -345,9 +370,9 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                 <div className="flex border-b mb-4">
                     <button
                         className={`px-4 py-2 font-medium ${activeTab === 'form' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
-                        onClick={() => setActiveTab('form')}
+                        onClick={() => { setActiveTab('form'); if (!editingPurchaseId) resetForm(); }}
                     >
-                        <i className="fa-solid fa-plus mr-2"></i>Nova Compra
+                        <i className={`fa-solid ${editingPurchaseId ? 'fa-pen' : 'fa-plus'} mr-2`}></i>{editingPurchaseId ? 'Editar Compra' : 'Nova Compra'}
                     </button>
                     <button
                         className={`px-4 py-2 font-medium ${activeTab === 'history' ? 'border-b-2 border-blue-500 text-blue-600' : 'text-gray-500'}`}
@@ -486,26 +511,37 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                             />
                         </div>
 
-                        <button
-                            type="submit"
-                            disabled={submitting}
-                            className={`w-full px-4 py-2 rounded flex items-center justify-center ${submitting
-                                ? 'bg-gray-400 cursor-not-allowed'
-                                : 'bg-blue-600 hover:bg-blue-700'
-                                } text-white`}
-                        >
-                            {submitting ? (
-                                <>
-                                    <i className="fa-solid fa-spinner fa-spin mr-2"></i>
-                                    Registrando...
-                                </>
-                            ) : (
-                                <>
-                                    <i className="fa-solid fa-check mr-2"></i>
-                                    Registrar Compra
-                                </>
+                        <div className="flex gap-2">
+                            {editingPurchaseId && (
+                                <button
+                                    type="button"
+                                    onClick={resetForm}
+                                    className="flex-1 px-4 py-2 rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                                >
+                                    Cancelar
+                                </button>
                             )}
-                        </button>
+                            <button
+                                type="submit"
+                                disabled={submitting}
+                                className={`flex-1 px-4 py-2 rounded flex items-center justify-center ${submitting
+                                    ? 'bg-gray-400 cursor-not-allowed'
+                                    : editingPurchaseId ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-blue-600 hover:bg-blue-700'
+                                    } text-white`}
+                            >
+                                {submitting ? (
+                                    <>
+                                        <i className="fa-solid fa-spinner fa-spin mr-2"></i>
+                                        {editingPurchaseId ? 'Atualizando...' : 'Registrando...'}
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className={`fa-solid ${editingPurchaseId ? 'fa-save' : 'fa-check'} mr-2`}></i>
+                                        {editingPurchaseId ? 'Salvar Alterações' : 'Registrar Compra'}
+                                    </>
+                                )}
+                            </button>
+                        </div>
                     </form>
                 )}
 
@@ -574,7 +610,6 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total</th>
                                                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vencimento</th>
                                                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nota</th>
-                                                <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
                                                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                                             </tr>
                                         </thead>
@@ -602,31 +637,30 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                                     <td className="px-3 py-3 whitespace-nowrap text-sm">
                                                         {(purchase as any).invoice_number || '-'}
                                                     </td>
-                                                    <td className="px-3 py-3 whitespace-nowrap text-center">
-                                                        {(purchase as any).is_term ? (
-                                                            (purchase as any).payment_date ? (
-                                                                <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                                    Pago em {formatDateString((purchase as any).payment_date)}
-                                                                </span>
-                                                            ) : (
-                                                                <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
-                                                                    A Prazo - Pendente
-                                                                </span>
-                                                            )
-                                                        ) : (
-                                                            <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
-                                                                À Vista
-                                                            </span>
-                                                        )}
-                                                    </td>
                                                     <td className="px-3 py-3 whitespace-nowrap text-right">
-                                                        <button
-                                                            onClick={() => handleDelete(purchase.id)}
-                                                            className="text-red-600 hover:text-red-800"
-                                                            title="Excluir"
-                                                        >
-                                                            <i className="fa-solid fa-trash"></i>
-                                                        </button>
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                onClick={() => setViewingPurchase(purchase)}
+                                                                className="text-gray-600 hover:text-gray-800"
+                                                                title="Visualizar"
+                                                            >
+                                                                <i className="fa-solid fa-eye"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleEdit(purchase)}
+                                                                className="text-blue-600 hover:text-blue-800"
+                                                                title="Editar"
+                                                            >
+                                                                <i className="fa-solid fa-pen"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDelete(purchase.id)}
+                                                                className="text-red-600 hover:text-red-800"
+                                                                title="Excluir"
+                                                            >
+                                                                <i className="fa-solid fa-trash"></i>
+                                                            </button>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             ))}
@@ -635,6 +669,88 @@ const ProductPurchaseModal: React.FC<ProductPurchaseModalProps> = ({ isOpen, onC
                                 )}
                             </>
                         )}
+                    </div>
+                )}
+
+                {/* View Purchase Detail Modal */}
+                {viewingPurchase && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-md">
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-bold">Detalhes da Compra</h3>
+                                <button onClick={() => setViewingPurchase(null)} className="text-gray-500 hover:text-gray-700">
+                                    <i className="fa-solid fa-times"></i>
+                                </button>
+                            </div>
+                            <div className="space-y-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Data da Compra</span>
+                                        <span className="text-sm font-medium">{formatDateString(viewingPurchase.purchase_date)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Empresa</span>
+                                        <span className="text-sm font-medium">{viewingPurchase.location_name || '-'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Preço Unitário</span>
+                                        <span className="text-sm font-medium">R$ {viewingPurchase.unit_price.toFixed(2)}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Quantidade</span>
+                                        <span className="text-sm font-medium">{viewingPurchase.quantity}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-green-50 p-3 rounded-lg">
+                                    <span className="text-xs text-gray-500 block">Valor Total</span>
+                                    <span className="text-lg font-bold text-green-700">R$ {viewingPurchase.total_amount.toFixed(2)}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Vencimento</span>
+                                        <span className="text-sm font-medium">{(viewingPurchase as any).due_date ? formatDateString((viewingPurchase as any).due_date) : '-'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Nº da Nota</span>
+                                        <span className="text-sm font-medium">{(viewingPurchase as any).invoice_number || '-'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Tipo</span>
+                                        <span className="text-sm font-medium">
+                                            {(viewingPurchase as any).is_term || (viewingPurchase as any).is_installment ? (
+                                                <span className="px-2 py-0.5 text-xs rounded-full bg-yellow-100 text-yellow-800">A Prazo</span>
+                                            ) : (
+                                                <span className="px-2 py-0.5 text-xs rounded-full bg-green-100 text-green-800">À Vista</span>
+                                            )}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Data Pagamento</span>
+                                        <span className="text-sm font-medium">{(viewingPurchase as any).payment_date ? formatDateString((viewingPurchase as any).payment_date) : '-'}</span>
+                                    </div>
+                                </div>
+                                {viewingPurchase.notes && (
+                                    <div>
+                                        <span className="text-xs text-gray-500 block">Observações</span>
+                                        <p className="text-sm mt-1 bg-gray-50 p-2 rounded">{viewingPurchase.notes}</p>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button
+                                    onClick={() => { handleEdit(viewingPurchase); setViewingPurchase(null); }}
+                                    className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                                >
+                                    <i className="fa-solid fa-pen mr-2"></i>Editar
+                                </button>
+                                <button
+                                    onClick={() => setViewingPurchase(null)}
+                                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 text-sm"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 

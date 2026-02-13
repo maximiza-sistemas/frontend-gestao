@@ -354,12 +354,11 @@ const RelatorioDetalhado: React.FC = () => {
 
         addTable(
             `Vendas${clientFilter !== 'Todos' ? ` (${clientFilter})` : ''}`,
-            ['Cliente', 'Cidade', 'Produto', 'Data', 'Situação', 'Qtd.', 'Valor Bruto', 'Despesas', 'Valores Pagos', 'Diferença'],
+            ['Cliente', 'Cidade', 'Produto', 'Data', 'Situação', 'Qtd.', 'Valor Bruto', 'Despesas', 'Valores Pagos'],
             [
                 ...filteredSales.map((sale) => {
                     const saleExp = (sale as any).expenses || 0;
                     const salePaid = getSalePaidAmount(sale);
-                    const saleDiff = sale.total - salePaid;
                     return [
                         sale.client,
                         sale.city,
@@ -370,7 +369,6 @@ const RelatorioDetalhado: React.FC = () => {
                         formatCurrency(sale.total),
                         saleExp > 0 ? `- ${formatCurrency(saleExp)}` : '-',
                         formatCurrency(salePaid),
-                        formatCurrency(saleDiff),
                     ];
                 }),
                 [
@@ -382,8 +380,7 @@ const RelatorioDetalhado: React.FC = () => {
                     totalQuantity,
                     formatCurrency(totalSales),
                     orderExpensesTotal > 0 ? `- ${formatCurrency(orderExpensesTotal)}` : '-',
-                    formatCurrency(totalReceived),
-                    formatCurrency(totalSales - totalReceived),
+                    `${formatCurrency(totalReceived)} (Dif: ${formatCurrency(totalSales - totalReceived)})`,
                 ],
             ]
         );
@@ -661,15 +658,13 @@ const RelatorioDetalhado: React.FC = () => {
                                 <th class="right">Valor Bruto</th>
                                 <th class="right">Despesas</th>
                                 <th class="right">Valores Pagos</th>
-                                <th class="right">Diferença</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${filteredSales.length === 0 ? '<tr><td colspan="10" style="text-align:center;color:#999;">Nenhuma venda no período.</td></tr>' : ''}
+                            ${filteredSales.length === 0 ? '<tr><td colspan="9" style="text-align:center;color:#999;">Nenhuma venda no período.</td></tr>' : ''}
                             ${filteredSales.map(sale => {
             const saleExp = (sale as any).expenses || 0;
             const salePaid = getSalePaidAmount(sale);
-            const saleDiff = sale.total - salePaid;
             const paymentStatusClass = (sale as any).paymentStatus === 'Pago' ? 'green' : (sale as any).paymentStatus === 'Vencido' ? 'red' : 'orange';
             return `<tr>
                                     <td>${sale.client}</td>
@@ -681,7 +676,6 @@ const RelatorioDetalhado: React.FC = () => {
                                     <td class="right green">${formatCurrency(sale.total)}</td>
                                     <td class="right red">${saleExp > 0 ? '- ' + formatCurrency(saleExp) : '-'}</td>
                                     <td class="right green">${formatCurrency(salePaid)}</td>
-                                    <td class="right ${saleDiff > 0 ? 'orange' : 'green'}">${formatCurrency(saleDiff)}</td>
                                 </tr>`;
         }).join('')}
                             ${filteredSales.length > 0 ? `<tr class="total">
@@ -689,8 +683,7 @@ const RelatorioDetalhado: React.FC = () => {
                                 <td class="right">${totalQuantity}</td>
                                 <td class="right green">${formatCurrency(totalSales)}</td>
                                 <td class="right red">${orderExpensesTotal > 0 ? '- ' + formatCurrency(orderExpensesTotal) : '-'}</td>
-                                <td class="right green">${formatCurrency(totalReceived)}</td>
-                                <td class="right ${(totalSales - totalReceived) > 0 ? 'orange' : 'green'}">${formatCurrency(totalSales - totalReceived)}</td>
+                                <td class="right green">${formatCurrency(totalReceived)} <small class="${(totalSales - totalReceived) > 0 ? 'orange' : 'green'}">(Dif: ${formatCurrency(totalSales - totalReceived)})</small></td>
                             </tr>` : ''}
                         </tbody>
                     </table>
@@ -1090,13 +1083,12 @@ const RelatorioDetalhado: React.FC = () => {
                                 <th className="px-4 py-3 text-right">Valor Bruto</th>
                                 <th className="px-4 py-3 text-right">Despesas</th>
                                 <th className="px-4 py-3 text-right">Valores Pagos</th>
-                                <th className="px-4 py-3 text-right">Diferença</th>
                             </tr>
                         </thead>
                         <tbody>
                             {filteredSales.length === 0 && (
                                 <tr>
-                                    <td colSpan={10} className="px-4 py-3 text-center text-gray-500">
+                                    <td colSpan={9} className="px-4 py-3 text-center text-gray-500">
                                         Nenhuma venda registrada no período selecionado.
                                     </td>
                                 </tr>
@@ -1104,7 +1096,6 @@ const RelatorioDetalhado: React.FC = () => {
                             {filteredSales.map((sale, index) => {
                                 const saleExpenses = (sale as any).expenses || 0;
                                 const salePaid = getSalePaidAmount(sale);
-                                const saleDiff = sale.total - salePaid;
                                 const paymentStatus = (sale as any).paymentStatus || 'Pendente';
                                 const paymentStatusClass = paymentStatus === 'Pago' ? 'text-green-600' : paymentStatus === 'Vencido' ? 'text-red-600' : 'text-orange-600';
                                 return (
@@ -1124,9 +1115,6 @@ const RelatorioDetalhado: React.FC = () => {
                                         <td className="px-4 py-3 text-right text-green-600 font-semibold">
                                             {formatCurrency(salePaid)}
                                         </td>
-                                        <td className={`px-4 py-3 text-right font-bold ${saleDiff > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                            {formatCurrency(saleDiff)}
-                                        </td>
                                     </tr>
                                 );
                             })}
@@ -1138,8 +1126,12 @@ const RelatorioDetalhado: React.FC = () => {
                                     <td className="px-4 py-3 text-right text-red-600">
                                         {orderExpensesTotal > 0 ? `- ${formatCurrency(orderExpensesTotal)}` : '-'}
                                     </td>
-                                    <td className="px-4 py-3 text-right text-green-600">{formatCurrency(totalReceived)}</td>
-                                    <td className={`px-4 py-3 text-right font-bold ${(totalSales - totalReceived) > 0 ? 'text-orange-600' : 'text-green-600'}`}>{formatCurrency(totalSales - totalReceived)}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        <span className="text-green-600">{formatCurrency(totalReceived)}</span>
+                                        <span className={`ml-2 text-xs font-bold ${(totalSales - totalReceived) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                            (Dif: {formatCurrency(totalSales - totalReceived)})
+                                        </span>
+                                    </td>
                                 </tr>
                             )}
                         </tbody>

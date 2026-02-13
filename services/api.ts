@@ -354,6 +354,20 @@ class ApiService {
     return this.put(`/products/${productId}/purchases/${purchaseId}/installments/${installmentId}`, data);
   }
 
+  async updateProductPurchase(productId: number, purchaseId: number, data: {
+    unit_price?: number;
+    quantity?: number;
+    purchase_date?: string;
+    is_term?: boolean;
+    payment_date?: string;
+    due_date?: string;
+    invoice_number?: string;
+    location_id?: number;
+    notes?: string;
+  }) {
+    return this.put(`/products/${productId}/purchases/${purchaseId}`, data);
+  }
+
   async deleteProductPurchase(productId: number, purchaseId: number) {
     return this.delete(`/products/${productId}/purchases/${purchaseId}`);
   }
