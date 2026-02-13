@@ -218,40 +218,14 @@ const RelatorioDetalhado: React.FC = () => {
         [expenses]
     );
 
-    // Normaliza nome do cliente removendo prefixo "ID - " (ex: "33 - MOUSINHO" -> "mousinho")
-    const normalizeClientKey = (name: string) => {
-        const cleaned = (name || '').toLowerCase().trim();
-        const dashIdx = cleaned.indexOf(' - ');
-        return dashIdx >= 0 ? cleaned.substring(dashIdx + 3).trim() : cleaned;
-    };
-
-    // Mapa de valores pagos por cliente (de receivements)
-    const clientPaidMap = useMemo(() => {
-        const map = new Map<string, number>();
-        filteredReceivements.forEach(item => {
-            const clientKey = normalizeClientKey(item.client);
-            map.set(clientKey, (map.get(clientKey) || 0) + (item.received ?? item.amount));
-        });
-        return map;
-    }, [filteredReceivements]);
-
-    // Mapa de faturamento total por cliente (para proporcionalizar)
-    const clientTotalMap = useMemo(() => {
-        const map = new Map<string, number>();
-        filteredSales.forEach(sale => {
-            const clientKey = normalizeClientKey(sale.client);
-            map.set(clientKey, (map.get(clientKey) || 0) + sale.total);
-        });
-        return map;
-    }, [filteredSales]);
-
-    // Função para obter valor pago proporcional por linha
+    // Função para obter valor pago real por item do pedido
+    // Usa o paid_amount real do pedido, distribuído proporcionalmente entre os itens do mesmo pedido
     const getSalePaidAmount = (sale: any) => {
-        const clientKey = normalizeClientKey(sale.client);
-        const clientPaid = clientPaidMap.get(clientKey) || 0;
-        const clientTotal = clientTotalMap.get(clientKey) || 1;
-        // Distribui proporcionalmente ao valor bruto de cada linha
-        return clientTotal > 0 ? (sale.total / clientTotal) * clientPaid : 0;
+        const orderPaid = sale.orderPaidAmount ?? 0;
+        const orderTotal = sale.orderTotalValue ?? 0;
+        if (orderTotal <= 0) return 0;
+        // Proporcional ao valor deste item dentro do pedido
+        return (sale.total / orderTotal) * orderPaid;
     };
 
     // Novas métricas: Despesas por pedido, Compras e Valor Líquido
@@ -273,8 +247,14 @@ const RelatorioDetalhado: React.FC = () => {
         [filteredReceivements]
     );
 
-    // Saldo a Receber = Faturamento Bruto - Total Recebido
-    const saldoAReceber = totalSales - totalReceived;
+    // Total pago calculado a partir das vendas (usa paid_amount real do pedido)
+    const totalPaidFromSales = useMemo(
+        () => filteredSales.reduce((sum, sale) => sum + getSalePaidAmount(sale), 0),
+        [filteredSales]
+    );
+
+    // Saldo a Receber = Faturamento Bruto - Total Pago (baseado nas vendas)
+    const saldoAReceber = totalSales - totalPaidFromSales;
 
     // Nome do cliente selecionado para exibição
     const selectedClientName = clientFilter !== 'Todos' ? clientFilter : null;
@@ -380,7 +360,7 @@ const RelatorioDetalhado: React.FC = () => {
                     totalQuantity,
                     formatCurrency(totalSales),
                     orderExpensesTotal > 0 ? `- ${formatCurrency(orderExpensesTotal)}` : '-',
-                    `${formatCurrency(totalReceived)} (Dif: ${formatCurrency(totalSales - totalReceived)})`,
+                    `${formatCurrency(totalPaidFromSales)} (Dif: ${formatCurrency(totalSales - totalPaidFromSales)})`,
                 ],
             ]
         );
@@ -683,7 +663,7 @@ const RelatorioDetalhado: React.FC = () => {
                                 <td class="right">${totalQuantity}</td>
                                 <td class="right green">${formatCurrency(totalSales)}</td>
                                 <td class="right red">${orderExpensesTotal > 0 ? '- ' + formatCurrency(orderExpensesTotal) : '-'}</td>
-                                <td class="right green">${formatCurrency(totalReceived)} <small class="${(totalSales - totalReceived) > 0 ? 'orange' : 'green'}">(Dif: ${formatCurrency(totalSales - totalReceived)})</small></td>
+                                <td class="right green">${formatCurrency(totalPaidFromSales)} <small class="${(totalSales - totalPaidFromSales) > 0 ? 'orange' : 'green'}">(Dif: ${formatCurrency(totalSales - totalPaidFromSales)})</small></td>
                             </tr>` : ''}
                         </tbody>
                     </table>
@@ -1127,9 +1107,9 @@ const RelatorioDetalhado: React.FC = () => {
                                         {orderExpensesTotal > 0 ? `- ${formatCurrency(orderExpensesTotal)}` : '-'}
                                     </td>
                                     <td className="px-4 py-3 text-right">
-                                        <span className="text-green-600">{formatCurrency(totalReceived)}</span>
-                                        <span className={`ml-2 text-xs font-bold ${(totalSales - totalReceived) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
-                                            (Dif: {formatCurrency(totalSales - totalReceived)})
+                                        <span className="text-green-600">{formatCurrency(totalPaidFromSales)}</span>
+                                        <span className={`ml-2 text-xs font-bold ${(totalSales - totalPaidFromSales) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                                            (Dif: {formatCurrency(totalSales - totalPaidFromSales)})
                                         </span>
                                     </td>
                                 </tr>
