@@ -15,7 +15,7 @@ const resolveApiBaseUrl = () => {
 
     // Se estiver em localhost, usar API de desenvolvimento
     if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-      const portAdjustedOrigin = origin.replace(/:(5173|4173|8080)$/, ':3000');
+      const portAdjustedOrigin = origin.replace(/:\d+$/, ':3000');
       return `${portAdjustedOrigin.replace(/\/$/, '')}/api`;
     }
 

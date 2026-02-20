@@ -216,6 +216,7 @@ export interface DetailedSaleRecord {
     status?: string;
     paymentStatus?: string;
     paidAmount?: number;
+    dueDate?: string;
 }
 
 export interface ProductSummary {

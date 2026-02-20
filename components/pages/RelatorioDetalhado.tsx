@@ -253,6 +253,17 @@ const RelatorioDetalhado: React.FC = () => {
         [filteredSales]
     );
 
+    // Valores Vencidos (Pedidos a prazo vencidos e não pagos)
+    const valoresVencidos = useMemo(() => {
+        const todayIso = new Date().toISOString().split('T')[0];
+        return filteredSales.reduce((sum, sale) => {
+            if (sale.dueDate && sale.dueDate < todayIso && sale.paymentStatus !== 'Pago') {
+                return sum + (sale.total - getSalePaidAmount(sale));
+            }
+            return sum;
+        }, 0);
+    }, [filteredSales]);
+
     // Saldo a Receber = Faturamento Bruto - Total Pago (baseado nas vendas)
     const saldoAReceber = totalSales - totalPaidFromSales;
 
@@ -619,6 +630,11 @@ const RelatorioDetalhado: React.FC = () => {
                     </div>
 
                     <div class="summary-card">
+                        <div class="label">🚨 Valores Vencidos</div>
+                        <div class="value ${valoresVencidos > 0 ? 'red' : 'green'}">${formatCurrency(valoresVencidos)}</div>
+                    </div>
+
+                    <div class="summary-card">
                         <div class="label">📊 Ticket Médio</div>
                         <div class="value">${formatCurrency(averageTicket)}</div>
                     </div>
@@ -630,7 +646,7 @@ const RelatorioDetalhado: React.FC = () => {
                         <thead>
                             <tr>
                                 <th>Cliente</th>
-                                <th>Cidade</th>
+                                <th>Vencimento</th>
                                 <th>Produto</th>
                                 <th>Data</th>
                                 <th>Situação</th>
@@ -646,9 +662,27 @@ const RelatorioDetalhado: React.FC = () => {
             const saleExp = (sale as any).expenses || 0;
             const salePaid = getSalePaidAmount(sale);
             const paymentStatusClass = (sale as any).paymentStatus === 'Pago' ? 'green' : (sale as any).paymentStatus === 'Vencido' ? 'red' : 'orange';
+
+            // Lógica de cores do vencimento
+            let dueDateClass = '';
+            let dueDateDisplay = '-';
+            const todayIso = new Date().toISOString().split('T')[0];
+            if (sale.dueDate) {
+                dueDateDisplay = formatPtDate(sale.dueDate);
+                if (sale.paymentStatus === 'Pago') {
+                    dueDateClass = 'green';
+                } else {
+                    const diffTime = new Date(`${sale.dueDate}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime();
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays < 0) dueDateClass = 'red font-bold';
+                    else if (diffDays <= 3) dueDateClass = 'orange font-bold';
+                    else dueDateClass = 'green';
+                }
+            }
+
             return `<tr>
                                     <td>${sale.client}</td>
-                                    <td>${sale.city}</td>
+                                    <td class="${dueDateClass}">${dueDateDisplay}</td>
                                     <td>${sale.product}</td>
                                     <td>${sale.date ? formatPtDate(sale.date) : '-'}</td>
                                     <td class="${paymentStatusClass}">${(sale as any).paymentStatus || 'Pendente'}</td>
@@ -976,70 +1010,82 @@ const RelatorioDetalhado: React.FC = () => {
                 )}
             </div>
 
-            {/* KPIs - Layout com ícone no topo em 2 linhas */}
-            <div className="space-y-4">
-                {/* Primeira Linha: Faturamento, Quantidade, Ticket Médio */}
-                <div className="grid grid-cols-3 gap-4">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-emerald-500">
-                            <i className="fas fa-coins text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Faturamento Bruto</p>
-                        <p className="text-xl font-bold text-emerald-600 leading-tight">{formatCurrency(totalSales)}</p>
+            {/* KPIs - Layout Unificado em 4 colunas responsivas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                {/* 1. Faturamento Bruto */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-emerald-500">
+                        <i className="fas fa-coins text-xl text-white"></i>
                     </div>
-
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-blue-500">
-                            <i className="fas fa-box text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Quantidade Total</p>
-                        <p className="text-xl font-bold text-gray-800 leading-tight">{totalQuantity} un</p>
-                    </div>
-
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-amber-500">
-                            <i className="fas fa-chart-line text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Ticket Médio</p>
-                        <p className="text-xl font-bold text-gray-800 leading-tight">{formatCurrency(averageTicket)}</p>
-                    </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Faturamento Bruto</p>
+                    <p className="text-base md:text-lg font-bold text-emerald-600 leading-tight w-full truncate" title={formatCurrency(totalSales)}>{formatCurrency(totalSales)}</p>
                 </div>
 
-                {/* Segunda Linha: Despesas, Compras, Valores Pagos, Saldo a Receber */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-rose-500">
-                            <i className="fas fa-receipt text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Despesas (Pedidos)</p>
-                        <p className="text-xl font-bold text-rose-600 leading-tight">- {formatCurrency(orderExpensesTotal)}</p>
+                {/* 2. Quantidade Total */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-blue-500">
+                        <i className="fas fa-box text-xl text-white"></i>
                     </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Quantidade Total</p>
+                    <p className="text-base md:text-lg font-bold text-gray-800 leading-tight w-full truncate" title={`${totalQuantity} un`}>{totalQuantity} un</p>
+                </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-orange-500">
-                            <i className="fas fa-shopping-cart text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Compras (Botijões)</p>
-                        <p className="text-xl font-bold text-orange-600 leading-tight">- {formatCurrency(purchasesTotal)}</p>
+                {/* 3. Ticket Médio */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-amber-500">
+                        <i className="fas fa-chart-line text-xl text-white"></i>
                     </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Ticket Médio</p>
+                    <p className="text-base md:text-lg font-bold text-gray-800 leading-tight w-full truncate" title={formatCurrency(averageTicket)}>{formatCurrency(averageTicket)}</p>
+                </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-blue-200 bg-blue-50 p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow">
-                        <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4 bg-blue-500">
-                            <i className="fas fa-hand-holding-usd text-2xl text-white"></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Valores Pagos</p>
-                        <p className="text-xl font-bold text-blue-600 leading-tight">{formatCurrency(totalReceived)}</p>
+                {/* 4. Pagos */}
+                <div className="bg-white rounded-xl shadow-sm border border-blue-200 bg-blue-50 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-blue-500">
+                        <i className="fas fa-hand-holding-usd text-xl text-white"></i>
                     </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Pagos</p>
+                    <p className="text-base md:text-lg font-bold text-blue-600 leading-tight w-full truncate" title={formatCurrency(totalReceived)}>{formatCurrency(totalReceived)}</p>
+                </div>
 
-                    <div className={`bg-white rounded-xl shadow-sm border p-5 flex flex-col items-center text-center hover:shadow-md transition-shadow ${saldoAReceber > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                        <div className={`w-14 h-14 rounded-full flex items-center justify-center mb-4 ${saldoAReceber > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
-                            <i className={`fas ${saldoAReceber > 0 ? 'fa-clock' : 'fa-check-double'} text-2xl text-white`}></i>
-                        </div>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Saldo a Receber</p>
-                        <p className={`text-xl font-bold leading-tight ${saldoAReceber > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                            {formatCurrency(saldoAReceber)}
-                        </p>
+                {/* 5. Saldo a Receber */}
+                <div className={`bg-white rounded-xl shadow-sm border p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow ${saldoAReceber > 0 ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${saldoAReceber > 0 ? 'bg-amber-500' : 'bg-emerald-500'}`}>
+                        <i className={`fas ${saldoAReceber > 0 ? 'fa-clock' : 'fa-check-double'} text-xl text-white`}></i>
                     </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">A Receber</p>
+                    <p className={`text-base md:text-lg font-bold leading-tight w-full truncate ${saldoAReceber > 0 ? 'text-amber-600' : 'text-emerald-600'}`} title={formatCurrency(saldoAReceber)}>
+                        {formatCurrency(saldoAReceber)}
+                    </p>
+                </div>
+
+                {/* 6. Vencidos */}
+                <div className={`bg-white rounded-xl shadow-sm border p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow ${valoresVencidos > 0 ? 'border-red-200 bg-red-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-3 ${valoresVencidos > 0 ? 'bg-red-500' : 'bg-emerald-500'}`}>
+                        <i className={`fas ${valoresVencidos > 0 ? 'fa-exclamation-circle' : 'fa-check-circle'} text-xl text-white`}></i>
+                    </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Vencidos</p>
+                    <p className={`text-base md:text-lg font-bold leading-tight w-full truncate ${valoresVencidos > 0 ? 'text-red-600' : 'text-emerald-600'}`} title={formatCurrency(valoresVencidos)}>
+                        {formatCurrency(valoresVencidos)}
+                    </p>
+                </div>
+
+                {/* 7. Compras */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-orange-500">
+                        <i className="fas fa-shopping-cart text-xl text-white"></i>
+                    </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Compras</p>
+                    <p className="text-base md:text-lg font-bold text-orange-600 leading-tight w-full truncate" title={`- ${formatCurrency(purchasesTotal)}`}>- {formatCurrency(purchasesTotal)}</p>
+                </div>
+
+                {/* 8. Despesas */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col items-center text-center hover:shadow-md transition-shadow">
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 bg-rose-500">
+                        <i className="fas fa-receipt text-xl text-white"></i>
+                    </div>
+                    <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Despesas</p>
+                    <p className="text-base md:text-lg font-bold text-rose-600 leading-tight w-full truncate" title={`- ${formatCurrency(orderExpensesTotal)}`}>- {formatCurrency(orderExpensesTotal)}</p>
                 </div>
             </div>
 
@@ -1055,7 +1101,7 @@ const RelatorioDetalhado: React.FC = () => {
                         <thead className="bg-gray-50 text-gray-600 uppercase text-xs">
                             <tr>
                                 <th className="px-4 py-3 text-left">Cliente</th>
-                                <th className="px-4 py-3 text-left">Cidade</th>
+                                <th className="px-4 py-3 text-left">Vencimento</th>
                                 <th className="px-4 py-3 text-left">Produto</th>
                                 <th className="px-4 py-3 text-left">Data</th>
                                 <th className="px-4 py-3 text-left">Situação</th>
@@ -1078,10 +1124,28 @@ const RelatorioDetalhado: React.FC = () => {
                                 const salePaid = getSalePaidAmount(sale);
                                 const paymentStatus = (sale as any).paymentStatus || 'Pendente';
                                 const paymentStatusClass = paymentStatus === 'Pago' ? 'text-green-600' : paymentStatus === 'Vencido' ? 'text-red-600' : 'text-orange-600';
+
+                                // Lógica de cores do vencimento
+                                let dueDateClass = 'text-gray-800';
+                                let dueDateDisplay = '-';
+                                const todayIso = new Date().toISOString().split('T')[0];
+                                if (sale.dueDate) {
+                                    dueDateDisplay = formatPtDate(sale.dueDate);
+                                    if (sale.paymentStatus === 'Pago') {
+                                        dueDateClass = 'text-green-600';
+                                    } else {
+                                        const diffTime = new Date(`${sale.dueDate}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime();
+                                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                                        if (diffDays < 0) dueDateClass = 'text-red-600 font-bold';
+                                        else if (diffDays <= 3) dueDateClass = 'text-orange-600 font-bold';
+                                        else dueDateClass = 'text-green-600';
+                                    }
+                                }
+
                                 return (
                                     <tr key={`${sale.client}-${index}`} className="border-b last:border-b-0">
                                         <td className="px-4 py-3 font-medium text-gray-800">{sale.client}</td>
-                                        <td className="px-4 py-3">{sale.city}</td>
+                                        <td className={`px-4 py-3 ${dueDateClass}`}>{dueDateDisplay}</td>
                                         <td className="px-4 py-3">{sale.product}</td>
                                         <td className="px-4 py-3">{sale.date ? formatPtDate(sale.date) : '-'}</td>
                                         <td className={`px-4 py-3 font-medium ${paymentStatusClass}`}>{paymentStatus}</td>

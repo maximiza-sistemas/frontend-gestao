@@ -61,6 +61,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
     const [valorEntrada, setValorEntrada] = useState('');
     const [metodoEntrada, setMetodoEntrada] = useState<MetodoPagamento>('Dinheiro');
     const [bancoEntrada, setBancoEntrada] = useState('');
+    const [dataVencimento, setDataVencimento] = useState('');
 
     // Observações
     const [observacoes, setObservacoes] = useState('');
@@ -125,6 +126,11 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
             const paymentMethod = orderToEdit.payment_method || orderToEdit.paymentMethod;
             if (paymentMethod === 'Prazo') {
                 setTipoPagamento('a_prazo');
+                if (orderToEdit.payment_due_date || orderToEdit.dueDate) {
+                    const dueDate = orderToEdit.payment_due_date || orderToEdit.dueDate;
+                    const dueDatePart = typeof dueDate === 'string' ? dueDate.split('T')[0] : '';
+                    setDataVencimento(dueDatePart);
+                }
             } else if (paymentMethod === 'Misto') {
                 setTipoPagamento('a_vista_combinado');
             } else if (paymentMethod) {
@@ -190,18 +196,24 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
             }
         }
 
-        if (tipoPagamento === 'a_prazo' && houveEntrada) {
-            if (!valorEntrada || parseFloat(valorEntrada) <= 0) {
-                alert('Informe o valor da entrada!');
+        if (tipoPagamento === 'a_prazo') {
+            if (!dataVencimento) {
+                alert('Informe a data de vencimento!');
                 return;
             }
-            if (metodoEntrada === 'Pix' && !bancoEntrada) {
-                alert('Selecione o banco da entrada!');
-                return;
-            }
-            if (metodoEntrada === 'Transferência' && !bancoEntrada) {
-                alert('Selecione o banco da entrada!');
-                return;
+            if (houveEntrada) {
+                if (!valorEntrada || parseFloat(valorEntrada) <= 0) {
+                    alert('Informe o valor da entrada!');
+                    return;
+                }
+                if (metodoEntrada === 'Pix' && !bancoEntrada) {
+                    alert('Selecione o banco da entrada!');
+                    return;
+                }
+                if (metodoEntrada === 'Transferência' && !bancoEntrada) {
+                    alert('Selecione o banco da entrada!');
+                    return;
+                }
             }
         }
 
@@ -250,6 +262,7 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                 tipoPagamento === 'a_vista' ? metodoPagamento : 'Misto',
             payment_status: tipoPagamento === 'a_prazo' && !houveEntrada ? 'Pendente' :
                 tipoPagamento === 'a_prazo' && houveEntrada ? 'Parcial' : 'Pago',
+            payment_due_date: tipoPagamento === 'a_prazo' ? dataVencimento : undefined,
             payment_cash_amount: tipoPagamento === 'a_vista' && metodoPagamento === 'Dinheiro' ? valorBruto :
                 tipoPagamento === 'a_vista_combinado' ? (parseFloat(valorDinheiro) || 0) : 0,
             payment_term_amount: tipoPagamento === 'a_prazo' ?
@@ -565,6 +578,20 @@ const OrderFormSimplified: React.FC<OrderFormSimplifiedProps> = ({ onSave, onClo
                 {/* A Prazo */}
                 {tipoPagamento === 'a_prazo' && (
                     <div className="space-y-4 bg-gray-50 p-4 rounded-md">
+                        {/* Data de Vencimento */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Data de Vencimento <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="date"
+                                value={dataVencimento}
+                                onChange={e => setDataVencimento(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-orange-500 focus:border-orange-500"
+                                required
+                            />
+                        </div>
+
                         {/* Toggle Entrada */}
                         <div className="flex items-center gap-3">
                             <label className="relative inline-flex items-center cursor-pointer">
