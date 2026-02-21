@@ -663,7 +663,7 @@ const RelatorioDetalhado: React.FC = () => {
             const salePaid = getSalePaidAmount(sale);
             const paymentStatusClass = (sale as any).paymentStatus === 'Pago' ? 'green' : (sale as any).paymentStatus === 'Vencido' ? 'red' : 'orange';
 
-            // Lógica de cores do vencimento
+            // Lógica de cores do vencimento: verde (não venceu) / vermelho (venceu hoje ou já vencido)
             let dueDateClass = '';
             let dueDateDisplay = '-';
             const todayIso = new Date().toISOString().split('T')[0];
@@ -672,11 +672,7 @@ const RelatorioDetalhado: React.FC = () => {
                 if (sale.paymentStatus === 'Pago') {
                     dueDateClass = 'green';
                 } else {
-                    const diffTime = new Date(`${sale.dueDate}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime();
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    if (diffDays < 0) dueDateClass = 'red font-bold';
-                    else if (diffDays <= 3) dueDateClass = 'orange font-bold';
-                    else dueDateClass = 'green';
+                    dueDateClass = sale.dueDate <= todayIso ? 'red font-bold' : 'green';
                 }
             }
 
@@ -1125,7 +1121,7 @@ const RelatorioDetalhado: React.FC = () => {
                                 const paymentStatus = (sale as any).paymentStatus || 'Pendente';
                                 const paymentStatusClass = paymentStatus === 'Pago' ? 'text-green-600' : paymentStatus === 'Vencido' ? 'text-red-600' : 'text-orange-600';
 
-                                // Lógica de cores do vencimento
+                                // Lógica de cores do vencimento: verde (não venceu) / vermelho (venceu hoje ou já vencido)
                                 let dueDateClass = 'text-gray-800';
                                 let dueDateDisplay = '-';
                                 const todayIso = new Date().toISOString().split('T')[0];
@@ -1134,11 +1130,7 @@ const RelatorioDetalhado: React.FC = () => {
                                     if (sale.paymentStatus === 'Pago') {
                                         dueDateClass = 'text-green-600';
                                     } else {
-                                        const diffTime = new Date(`${sale.dueDate}T00:00:00Z`).getTime() - new Date(`${todayIso}T00:00:00Z`).getTime();
-                                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                                        if (diffDays < 0) dueDateClass = 'text-red-600 font-bold';
-                                        else if (diffDays <= 3) dueDateClass = 'text-orange-600 font-bold';
-                                        else dueDateClass = 'text-green-600';
+                                        dueDateClass = sale.dueDate <= todayIso ? 'text-red-600 font-bold' : 'text-green-600';
                                     }
                                 }
 
