@@ -786,7 +786,49 @@ class ApiService {
   }
 
   async createFinancialTransaction(data: any): Promise<ApiResponse> {
+    // Se houver arquivo de comprovante, usar FormData
+    if (data.receipt_file instanceof File) {
+      const formData = new FormData();
+
+      // Adicionar todos os campos da transação
+      formData.append('type', data.type || '');
+      formData.append('description', data.description || '');
+      formData.append('amount', data.amount?.toString() || '0');
+      formData.append('transaction_date', data.transaction_date || '');
+      formData.append('due_date', data.due_date || '');
+      formData.append('status', data.status || 'Pendente');
+      formData.append('payment_method', data.payment_method || 'Dinheiro');
+      formData.append('notes', data.notes || '');
+      formData.append('category_id', data.category_id?.toString() || 'null');
+      formData.append('account_id', data.account_id?.toString() || '');
+      formData.append('destination_account_id', data.destination_account_id?.toString() || 'null');
+      formData.append('client_id', data.client_id?.toString() || 'null');
+      formData.append('supplier_id', data.supplier_id?.toString() || 'null');
+
+      // Adicionar o arquivo de comprovante
+      formData.append('receipt', data.receipt_file);
+
+      const headers: Record<string, string> = {};
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
+
+      console.log('📤 Criando transação financeira com comprovante via FormData');
+      const response = await fetch(`${API_BASE_URL}/financial/transactions`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+      return response.json();
+    }
+
+    // Sem arquivo, usar JSON normal
     return this.post('/financial/transactions', data);
+  }
+
+  getTransactionReceiptUrl(transactionId: number): string {
+    const token = this.token || '';
+    return `${API_BASE_URL}/financial/transactions/${transactionId}/receipt?token=${token}`;
   }
 
   async updateFinancialTransaction(id: number, data: any): Promise<ApiResponse> {

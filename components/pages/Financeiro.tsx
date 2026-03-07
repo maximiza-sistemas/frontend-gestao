@@ -37,6 +37,7 @@ interface FinancialTransaction {
     payment_date?: string;
     status: 'Pendente' | 'Pago' | 'Cancelado' | 'Vencido';
     notes?: string;
+    attachment_url?: string;
 }
 
 interface FinancialSummary {
@@ -122,10 +123,44 @@ const TransactionForm: React.FC<{
         payment_method: 'Dinheiro',
         notes: ''
     });
+    const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
+    const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleFileChange = (file: File | null) => {
+        if (!file) {
+            setAttachmentFile(null);
+            setAttachmentPreview(null);
+            return;
+        }
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+        if (!allowedTypes.includes(file.type)) {
+            alert('Apenas imagens (JPEG, PNG) e PDFs são permitidos.');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            alert('O arquivo deve ter no máximo 5MB.');
+            return;
+        }
+        setAttachmentFile(file);
+        if (file.type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onloadend = () => setAttachmentPreview(reader.result as string);
+            reader.readAsDataURL(file);
+        } else {
+            setAttachmentPreview(null);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        if (file) handleFileChange(file);
     };
 
     // Auto-select accounts and categories
@@ -163,7 +198,8 @@ const TransactionForm: React.FC<{
             account_id: Number(formData.account_id),
             destination_account_id: formData.destination_account_id ? Number(formData.destination_account_id) : null,
             client_id: formData.client_id ? Number(formData.client_id) : null,
-            supplier_id: formData.supplier_id ? Number(formData.supplier_id) : null
+            supplier_id: formData.supplier_id ? Number(formData.supplier_id) : null,
+            receipt_file: attachmentFile || undefined
         });
     };
 
@@ -289,6 +325,58 @@ const TransactionForm: React.FC<{
                     rows={3}
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                 />
+            </div>
+
+            {/* Upload de Comprovante */}
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Comprovante (Opcional)</label>
+                <div
+                    className={`mt-1 border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${attachmentFile ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                        }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDrop={handleDrop}
+                    onDragOver={(e) => e.preventDefault()}
+                >
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,application/pdf"
+                        className="hidden"
+                        onChange={(e) => handleFileChange(e.target.files?.[0] || null)}
+                    />
+                    {attachmentFile ? (
+                        <div className="flex items-center justify-center gap-3">
+                            {attachmentPreview ? (
+                                <img src={attachmentPreview} alt="Preview" className="h-16 w-16 object-cover rounded-lg border" />
+                            ) : (
+                                <div className="h-16 w-16 bg-red-100 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-file-pdf text-red-500 text-2xl"></i>
+                                </div>
+                            )}
+                            <div className="text-left">
+                                <p className="text-sm font-medium text-gray-800 truncate max-w-[200px]">{attachmentFile.name}</p>
+                                <p className="text-xs text-gray-500">{(attachmentFile.size / 1024).toFixed(1)} KB</p>
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleFileChange(null);
+                                        if (fileInputRef.current) fileInputRef.current.value = '';
+                                    }}
+                                    className="text-xs text-red-500 hover:text-red-700 mt-1"
+                                >
+                                    <i className="fas fa-times mr-1"></i>Remover
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <i className="fas fa-cloud-upload-alt text-gray-400 text-2xl mb-2"></i>
+                            <p className="text-sm text-gray-500">Clique ou arraste para anexar</p>
+                            <p className="text-xs text-gray-400 mt-1">JPEG, PNG ou PDF (máx. 5MB)</p>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="flex justify-end space-x-3 pt-4 border-t">
@@ -908,6 +996,26 @@ const Financeiro: React.FC = () => {
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Observações</label>
                                 <p className="mt-1 text-sm text-gray-900">{selectedTransaction.notes}</p>
+                            </div>
+                        )}
+
+                        {selectedTransaction.attachment_url && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Comprovante</label>
+                                <div className="mt-2 flex items-center gap-3">
+                                    <div className="h-10 w-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                        <i className={`fas ${selectedTransaction.attachment_url.endsWith('.pdf') ? 'fa-file-pdf text-red-500' : 'fa-file-image text-blue-500'} text-lg`}></i>
+                                    </div>
+                                    <a
+                                        href={api.getTransactionReceiptUrl(selectedTransaction.id)}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                                    >
+                                        <i className="fas fa-download mr-1"></i>
+                                        Visualizar Comprovante
+                                    </a>
+                                </div>
                             </div>
                         )}
 
