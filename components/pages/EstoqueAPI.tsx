@@ -15,6 +15,7 @@ const EstoqueAPI: React.FC = () => {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('Todos');
+  const [showExportMenu, setShowExportMenu] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'info'>('info');
@@ -384,6 +385,166 @@ const EstoqueAPI: React.FC = () => {
     return '';
   };
 
+  const formatDateBR = () => {
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    }).format(new Date());
+  };
+
+  const handleExportStockPDF = () => {
+    const jsPdfFactory = (window as any).jspdf?.jsPDF;
+    if (!jsPdfFactory) {
+      showMessage('Biblioteca de PDF não encontrada. Verifique sua conexão.', 'error');
+      return;
+    }
+
+    if (filteredStock.length === 0) {
+      showMessage('Nenhum dado de estoque para exportar.', 'error');
+      return;
+    }
+
+    const doc = new jsPdfFactory({ unit: 'pt', format: 'a4', compress: true });
+    const docAny = doc as any;
+    const dateStr = formatDateBR();
+
+    // Header
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('RELATÓRIO DE ESTOQUE', 40, 45);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Emitido em: ${dateStr}`, 40, 65);
+    if (locationFilter !== 'Todos') {
+      doc.text(`Localização: ${locationFilter}`, 40, 80);
+    }
+    if (searchTerm) {
+      doc.text(`Filtro: "${searchTerm}"`, 40, locationFilter !== 'Todos' ? 95 : 80);
+    }
+
+    // Summary cards
+    const summaryY = (searchTerm ? 15 : 0) + (locationFilter !== 'Todos' ? 15 : 0) + 90;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('Resumo:', 40, summaryY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    doc.text(`Cheios: ${totalFull}  |  Vazios: ${totalEmpty}  |  Manutenção: ${totalMaintenance}  |  Total: ${totalFull + totalEmpty + totalMaintenance}`, 40, summaryY + 15);
+
+    // Table
+    const getStatus = (item: typeof filteredStock[0]) => {
+      if (item.full_quantity <= item.minimum_stock) return 'Crítico';
+      if (item.full_quantity <= item.minimum_stock * 1.5) return 'Baixo';
+      return 'Normal';
+    };
+
+    const tableData = filteredStock.map(item => [
+      item.product_name,
+      item.location_name,
+      item.full_quantity,
+      item.empty_quantity,
+      item.maintenance_quantity,
+      item.full_quantity + item.empty_quantity + item.maintenance_quantity,
+      `Mín: ${item.minimum_stock} / Máx: ${item.maximum_stock}`,
+      getStatus(item)
+    ]);
+
+    tableData.push([
+      'TOTAL', '', totalFull, totalEmpty, totalMaintenance,
+      totalFull + totalEmpty + totalMaintenance, '', ''
+    ]);
+
+    docAny.autoTable({
+      startY: summaryY + 30,
+      head: [['Produto', 'Localização', 'Cheios', 'Vazios', 'Manutenção', 'Total', 'Limites', 'Status']],
+      body: tableData,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 4 },
+      headStyles: { fillColor: [245, 247, 250], textColor: 33, fontStyle: 'bold' },
+      columnStyles: {
+        2: { halign: 'center' },
+        3: { halign: 'center' },
+        4: { halign: 'center' },
+        5: { halign: 'center', fontStyle: 'bold' },
+        7: { halign: 'center' }
+      },
+      didParseCell: (data: any) => {
+        if (data.section === 'body' && data.column.index === 7) {
+          if (data.cell.raw === 'Crítico') {
+            data.cell.styles.textColor = [220, 38, 38];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (data.cell.raw === 'Baixo') {
+            data.cell.styles.textColor = [202, 138, 4];
+          } else if (data.cell.raw === 'Normal') {
+            data.cell.styles.textColor = [22, 163, 74];
+          }
+        }
+        // Highlight total row
+        if (data.section === 'body' && data.row.index === tableData.length - 1) {
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.fillColor = [245, 247, 250];
+        }
+      },
+      didDrawPage: () => {
+        const pageSize = doc.internal.pageSize;
+        doc.setFontSize(8);
+        doc.setTextColor(150);
+        doc.text(`Página ${doc.getNumberOfPages()}`, pageSize.getWidth() - 80, pageSize.getHeight() - 20);
+      }
+    });
+
+    const dateSafe = dateStr.replace(/[\/:]/g, '-').replace(/\s/g, '_');
+    doc.save(`relatorio-estoque-${dateSafe}.pdf`);
+    showMessage('Relatório PDF exportado com sucesso!', 'success');
+    setShowExportMenu(false);
+  };
+
+  const handleExportStockCSV = () => {
+    if (filteredStock.length === 0) {
+      showMessage('Nenhum dado de estoque para exportar.', 'error');
+      return;
+    }
+
+    const getStatus = (item: typeof filteredStock[0]) => {
+      if (item.full_quantity <= item.minimum_stock) return 'Crítico';
+      if (item.full_quantity <= item.minimum_stock * 1.5) return 'Baixo';
+      return 'Normal';
+    };
+
+    const headers = ['Produto', 'Localização', 'Cheios', 'Vazios', 'Manutenção', 'Total', 'Estoque Mínimo', 'Estoque Máximo', 'Status'];
+    const rows = filteredStock.map(item => [
+      `"${item.product_name}"`,
+      `"${item.location_name}"`,
+      item.full_quantity,
+      item.empty_quantity,
+      item.maintenance_quantity,
+      item.full_quantity + item.empty_quantity + item.maintenance_quantity,
+      item.minimum_stock,
+      item.maximum_stock,
+      getStatus(item)
+    ]);
+
+    // Total row
+    rows.push([
+      '"TOTAL"', '""', totalFull, totalEmpty, totalMaintenance,
+      totalFull + totalEmpty + totalMaintenance, '""', '""', '""'
+    ] as any);
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(row => row.join(';'))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateSafe = formatDateBR().replace(/[\/:]/g, '-').replace(/\s/g, '_');
+    link.download = `relatorio-estoque-${dateSafe}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showMessage('Relatório CSV exportado com sucesso!', 'success');
+    setShowExportMenu(false);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -427,14 +588,50 @@ const EstoqueAPI: React.FC = () => {
               Cadastrar Produto
             </Button>
             {activeTab === 'stock' && (
-              <Button
-                variant="secondary"
-                icon="fa-solid fa-database"
-                onClick={syncProductsToStock}
-                title="Sincronizar produtos com estoque"
-              >
-                Sincronizar
-              </Button>
+              <>
+                <div className="relative">
+                  <Button
+                    variant="secondary"
+                    icon="fa-solid fa-file-export"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    title="Exportar relatório de estoque"
+                  >
+                    Exportar
+                  </Button>
+                  {showExportMenu && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setShowExportMenu(false)}
+                      />
+                      <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
+                        <button
+                          onClick={handleExportStockPDF}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 flex items-center gap-2 transition-colors"
+                        >
+                          <i className="fa-solid fa-file-pdf text-red-500" />
+                          Exportar PDF
+                        </button>
+                        <button
+                          onClick={handleExportStockCSV}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-700 flex items-center gap-2 transition-colors"
+                        >
+                          <i className="fa-solid fa-file-csv text-green-600" />
+                          Exportar CSV
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <Button
+                  variant="secondary"
+                  icon="fa-solid fa-database"
+                  onClick={syncProductsToStock}
+                  title="Sincronizar produtos com estoque"
+                >
+                  Sincronizar
+                </Button>
+              </>
             )}
             <Button
               variant="secondary"
