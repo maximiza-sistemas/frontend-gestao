@@ -413,7 +413,6 @@ const Financeiro: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState('Todos');
     const [statusFilter, setStatusFilter] = useState('Todos');
-    const [categoryFilter, setCategoryFilter] = useState('Todos');
     const [dateRange, setDateRange] = useState({
         start: '',
         end: ''
@@ -575,12 +574,10 @@ const Financeiro: React.FC = () => {
 
             const matchesType = typeFilter === 'Todos' || transaction.type === typeFilter;
             const matchesStatus = statusFilter === 'Todos' || transaction.status === statusFilter;
-            const matchesCategory = categoryFilter === 'Todos' ||
-                transaction.category?.id?.toString() === categoryFilter;
 
-            return matchesSearch && matchesType && matchesStatus && matchesCategory;
+            return matchesSearch && matchesType && matchesStatus;
         });
-    }, [transactions, searchTerm, typeFilter, statusFilter, categoryFilter]);
+    }, [transactions, searchTerm, typeFilter, statusFilter]);
 
     // Separar receitas e despesas para as abas
     const receivables = filteredTransactions.filter(t => ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(t.type));
@@ -590,7 +587,6 @@ const Financeiro: React.FC = () => {
         setSearchTerm('');
         setTypeFilter('Todos');
         setStatusFilter('Todos');
-        setCategoryFilter('Todos');
         // Resetar para o mês atual ou limpar totalmente?
         // O usuário pediu "carregar do banco", talvez queira ver tudo.
         // Vamos manter o reset padrão, mas adicionar um botão "Ver Todas" na UI.
@@ -698,21 +694,6 @@ const Financeiro: React.FC = () => {
                             <option value="Cancelado">Cancelado</option>
                         </select>
 
-                        <select
-                            value={categoryFilter}
-                            onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="px-3 py-2 bg-gray-50 border-0 rounded-lg text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="Todos">Todas as Categorias</option>
-                            {Array.from(new Set(categories.map(c => c.id)))
-                                .map(id => categories.find(c => c.id === id))
-                                .map(cat => (
-                                    <option key={cat!.id} value={cat!.id.toString()}>
-                                        {cat!.name}
-                                    </option>
-                                ))}
-                        </select>
-
                         <button
                             onClick={showAllTransactions}
                             className="px-3 py-2 text-blue-600 hover:bg-blue-50 rounded-lg text-sm font-medium transition-colors"
@@ -760,7 +741,6 @@ const Financeiro: React.FC = () => {
                                     <th className="px-4 py-3">Data</th>
                                     <th className="px-4 py-3">Tipo</th>
                                     <th className="px-4 py-3">Conta</th>
-                                    <th className="px-4 py-3">Categoria</th>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3">Cliente</th>
                                     <th className="px-4 py-3">Valor</th>
@@ -771,11 +751,11 @@ const Financeiro: React.FC = () => {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={9} className="text-center py-4">Carregando...</td>
+                                        <td colSpan={8} className="text-center py-4">Carregando...</td>
                                     </tr>
                                 ) : filteredTransactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="text-center py-4">Nenhuma transação encontrada</td>
+                                        <td colSpan={8} className="text-center py-4">Nenhuma transação encontrada</td>
                                     </tr>
                                 ) : (
                                     filteredTransactions.map(transaction => (
@@ -794,16 +774,6 @@ const Financeiro: React.FC = () => {
                                                     </span>
                                                 ) : (
                                                     <span>{transaction.account?.name}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {transaction.category && (
-                                                    <span className="flex items-center">
-                                                        {transaction.category.icon && (
-                                                            <i className={`${transaction.category.icon} mr-2`} style={{ color: transaction.category.color }}></i>
-                                                        )}
-                                                        {transaction.category.name}
-                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">{transaction.description}</td>
@@ -891,7 +861,6 @@ const Financeiro: React.FC = () => {
                                 <tr>
                                     <th className="px-4 py-3">Código</th>
                                     <th className="px-4 py-3">Vencimento</th>
-                                    <th className="px-4 py-3">Categoria</th>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3">Valor</th>
                                     <th className="px-4 py-3">Status</th>
@@ -901,14 +870,13 @@ const Financeiro: React.FC = () => {
                             <tbody>
                                 {payables.length === 0 ? (
                                     <tr>
-                                        <td colSpan={7} className="text-center py-4">Nenhuma conta a pagar</td>
+                                        <td colSpan={6} className="text-center py-4">Nenhuma conta a pagar</td>
                                     </tr>
                                 ) : (
                                     payables.map(transaction => (
                                         <tr key={transaction.id} className="border-b hover:bg-gray-50">
                                             <td className="px-4 py-3">{transaction.transaction_code}</td>
                                             <td className="px-4 py-3">{transaction.due_date ? formatDate(transaction.due_date) : '-'}</td>
-                                            <td className="px-4 py-3">{transaction.category?.name || '-'}</td>
                                             <td className="px-4 py-3">{transaction.description}</td>
                                             <td className="px-4 py-3 font-semibold text-red-600">
                                                 {formatCurrency(transaction.amount)}
@@ -980,10 +948,6 @@ const Financeiro: React.FC = () => {
                                 <Badge variant={getStatusVariant(selectedTransaction.status)}>
                                     {selectedTransaction.status}
                                 </Badge>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Categoria</label>
-                                <p className="mt-1 text-sm text-gray-900">{selectedTransaction.category?.name || '-'}</p>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Conta</label>
