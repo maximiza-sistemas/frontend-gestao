@@ -107,21 +107,28 @@ const TransactionForm: React.FC<{
     clients: any[];
     suppliers: any[];
     isLoading: boolean;
-}> = ({ onSave, onClose, categories, accounts, clients, suppliers, isLoading }) => {
+    transactionToEdit?: FinancialTransaction | null;
+}> = ({ onSave, onClose, categories, accounts, clients, suppliers, isLoading, transactionToEdit }) => {
+    const formatDateForInput = (date: string | undefined) => {
+        if (!date) return new Date().toISOString().split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}/.test(date)) return date.split('T')[0];
+        return new Date(date).toISOString().split('T')[0];
+    };
+
     const [formData, setFormData] = useState({
-        type: 'Receita',
-        description: '',
-        amount: '',
-        transaction_date: new Date().toISOString().split('T')[0],
-        due_date: new Date().toISOString().split('T')[0],
-        category_id: '',
-        account_id: '',
+        type: transactionToEdit?.type || 'Receita',
+        description: transactionToEdit?.description || '',
+        amount: transactionToEdit ? String(transactionToEdit.amount) : '',
+        transaction_date: formatDateForInput(transactionToEdit?.transaction_date),
+        due_date: formatDateForInput(transactionToEdit?.due_date),
+        category_id: transactionToEdit?.category?.id ? String(transactionToEdit.category.id) : '',
+        account_id: transactionToEdit?.account?.id ? String(transactionToEdit.account.id) : '',
         destination_account_id: '',
-        client_id: '',
+        client_id: transactionToEdit?.client?.id ? String(transactionToEdit.client.id) : '',
         supplier_id: '',
-        status: 'Pendente',
-        payment_method: 'Dinheiro',
-        notes: ''
+        status: transactionToEdit?.status || 'Pendente',
+        payment_method: transactionToEdit?.payment_method || 'Dinheiro',
+        notes: transactionToEdit?.notes || ''
     });
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
@@ -408,6 +415,7 @@ const Financeiro: React.FC = () => {
     const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [selectedTransaction, setSelectedTransaction] = useState<FinancialTransaction | null>(null);
+    const [editingTransaction, setEditingTransaction] = useState<FinancialTransaction | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Filter states
@@ -538,13 +546,19 @@ const Financeiro: React.FC = () => {
     const handleSaveTransaction = async (data: any) => {
         setIsSubmitting(true);
         try {
-            const response = await api.createFinancialTransaction(data);
+            let response;
+            if (editingTransaction) {
+                response = await api.updateFinancialTransaction(editingTransaction.id, data);
+            } else {
+                response = await api.createFinancialTransaction(data);
+            }
             if (response.success) {
-                setToast({ message: 'Transação criada com sucesso!', type: 'success' });
+                setToast({ message: editingTransaction ? 'Transação atualizada com sucesso!' : 'Transação criada com sucesso!', type: 'success' });
                 setIsFormModalOpen(false);
+                setEditingTransaction(null);
                 loadInitialData();
             } else {
-                throw new Error(response.error || 'Erro ao criar transação');
+                throw new Error(response.error || 'Erro ao salvar transação');
             }
         } catch (error) {
             console.error('Erro ao salvar transação:', error);
@@ -552,6 +566,13 @@ const Financeiro: React.FC = () => {
         } finally {
             setIsSubmitting(false);
         }
+    };
+
+    const handleEditTransaction = (transaction: FinancialTransaction) => {
+        setIsDetailsModalOpen(false);
+        setSelectedTransaction(null);
+        setEditingTransaction(transaction);
+        setIsFormModalOpen(true);
     };
 
     // Filtrar transações
@@ -717,7 +738,7 @@ const Financeiro: React.FC = () => {
                         <div className="flex-1 flex justify-end">
                             <Button
                                 variant="primary"
-                                onClick={() => setIsFormModalOpen(true)}
+                                onClick={() => { setEditingTransaction(null); setIsFormModalOpen(true); }}
                                 className="shadow-lg shadow-orange-200"
                             >
                                 <i className="fas fa-plus mr-2"></i>
@@ -1039,6 +1060,13 @@ const Financeiro: React.FC = () => {
                                         Reverter para Pendente
                                     </Button>
                                 )}
+                                <Button
+                                    variant="primary"
+                                    onClick={() => handleEditTransaction(selectedTransaction)}
+                                >
+                                    <i className="fas fa-edit mr-2"></i>
+                                    Editar
+                                </Button>
                             </div>
                             <Button
                                 variant="danger"
@@ -1052,20 +1080,21 @@ const Financeiro: React.FC = () => {
                 </Modal>
             )}
 
-            {/* Modal de Nova Transação */}
+            {/* Modal de Nova/Editar Transação */}
             <Modal
                 isOpen={isFormModalOpen}
-                onClose={() => setIsFormModalOpen(false)}
-                title="Nova Transação"
+                onClose={() => { setIsFormModalOpen(false); setEditingTransaction(null); }}
+                title={editingTransaction ? 'Editar Transação' : 'Nova Transação'}
             >
                 <TransactionForm
                     onSave={handleSaveTransaction}
-                    onClose={() => setIsFormModalOpen(false)}
+                    onClose={() => { setIsFormModalOpen(false); setEditingTransaction(null); }}
                     categories={categories}
                     accounts={accounts}
                     clients={clients}
                     suppliers={suppliers}
                     isLoading={isSubmitting}
+                    transactionToEdit={editingTransaction}
                 />
             </Modal>
 
