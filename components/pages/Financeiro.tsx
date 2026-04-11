@@ -13,7 +13,7 @@ import FilterBar from '../common/FilterBar';
 interface FinancialTransaction {
     id: number;
     transaction_code: string;
-    type: 'Receita' | 'Despesa' | 'Transferência' | 'Depósito';
+    type: 'Receita' | 'Despesas Diversas' | 'Transferência' | 'Contas a Receber' | 'Retirada pelo Proprietário' | 'Venda no Vale' | 'Venda no Cartão' | 'Venda no Pix';
     category?: {
         id: number;
         name: string;
@@ -172,26 +172,15 @@ const TransactionForm: React.FC<{
 
     // Auto-select accounts and categories
     useEffect(() => {
-        if (formData.type === 'Depósito') {
-            const caixaAccount = accounts.find(acc => acc.name.includes('Caixa') || acc.type === 'Caixa');
-            const bancoAccount = accounts.find(acc => acc.name.includes('Banco') || acc.type === 'Banco');
-
-            setFormData(prev => ({
-                ...prev,
-                account_id: caixaAccount ? String(caixaAccount.id) : prev.account_id,
-                destination_account_id: bancoAccount ? String(bancoAccount.id) : prev.destination_account_id
-            }));
-        } else {
-            // Auto-select first account if not set
-            if (!formData.account_id && accounts.length > 0) {
-                setFormData(prev => ({ ...prev, account_id: String(accounts[0].id) }));
-            }
-            // Auto-select first category if not set
-            if (!formData.category_id && categories.length > 0) {
-                const availableCategories = categories.filter(c => c.type === formData.type);
-                if (availableCategories.length > 0) {
-                    setFormData(prev => ({ ...prev, category_id: String(availableCategories[0].id) }));
-                }
+        // Auto-select first account if not set
+        if (!formData.account_id && accounts.length > 0) {
+            setFormData(prev => ({ ...prev, account_id: String(accounts[0].id) }));
+        }
+        // Auto-select first category if not set
+        if (!formData.category_id && categories.length > 0) {
+            const availableCategories = categories.filter(c => c.type === formData.type);
+            if (availableCategories.length > 0) {
+                setFormData(prev => ({ ...prev, category_id: String(availableCategories[0].id) }));
             }
         }
     }, [formData.type, accounts, categories, formData.account_id, formData.category_id]);
@@ -210,9 +199,8 @@ const TransactionForm: React.FC<{
         });
     };
 
-    const isDeposit = formData.type === 'Depósito';
-    const isRevenue = formData.type === 'Receita';
-    const isExpense = formData.type === 'Despesa';
+    const isRevenue = formData.type === 'Receita' || formData.type === 'Contas a Receber' || formData.type === 'Venda no Vale' || formData.type === 'Venda no Cartão' || formData.type === 'Venda no Pix';
+    const isExpense = formData.type === 'Despesas Diversas' || formData.type === 'Retirada pelo Proprietário';
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -226,8 +214,12 @@ const TransactionForm: React.FC<{
                         className="mt-1 block w-auto border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
                     >
                         <option value="Receita">Receita</option>
-                        <option value="Despesa">Despesa</option>
-                        <option value="Depósito">Depósito</option>
+                        <option value="Despesas Diversas">Despesas Diversas</option>
+                        <option value="Contas a Receber">Contas a Receber</option>
+                        <option value="Retirada pelo Proprietário">Retirada pelo Proprietário</option>
+                        <option value="Venda no Vale">Venda no Vale</option>
+                        <option value="Venda no Cartão">Venda no Cartão</option>
+                        <option value="Venda no Pix">Venda no Pix</option>
                     </select>
                 </div>
                 <div>
@@ -237,7 +229,6 @@ const TransactionForm: React.FC<{
                         value={formData.status}
                         onChange={handleChange}
                         className="mt-1 block w-auto border border-gray-300 rounded-md shadow-sm py-1 px-2 text-sm"
-                        disabled={isDeposit} // Depósitos são sempre imediatos/pagos geralmente
                     >
                         <option value="Pendente">Pendente</option>
                         <option value="Pago">Pago</option>
@@ -592,8 +583,8 @@ const Financeiro: React.FC = () => {
     }, [transactions, searchTerm, typeFilter, statusFilter, categoryFilter]);
 
     // Separar receitas e despesas para as abas
-    const receivables = filteredTransactions.filter(t => t.type === 'Receita');
-    const payables = filteredTransactions.filter(t => t.type === 'Despesa');
+    const receivables = filteredTransactions.filter(t => ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(t.type));
+    const payables = filteredTransactions.filter(t => ['Despesas Diversas', 'Retirada pelo Proprietário'].includes(t.type));
 
     const clearFilters = () => {
         setSearchTerm('');
@@ -687,8 +678,12 @@ const Financeiro: React.FC = () => {
                         >
                             <option value="Todos">Todos os Tipos</option>
                             <option value="Receita">Receitas</option>
-                            <option value="Despesa">Despesas</option>
-                            <option value="Depósito">Depósitos</option>
+                            <option value="Despesas Diversas">Despesas Diversas</option>
+                            <option value="Contas a Receber">Contas a Receber</option>
+                            <option value="Retirada pelo Proprietário">Retirada pelo Proprietário</option>
+                            <option value="Venda no Vale">Venda no Vale</option>
+                            <option value="Venda no Cartão">Venda no Cartão</option>
+                            <option value="Venda no Pix">Venda no Pix</option>
                         </select>
 
                         <select
@@ -788,12 +783,12 @@ const Financeiro: React.FC = () => {
                                             <td className="px-4 py-3">{transaction.transaction_code}</td>
                                             <td className="px-4 py-3">{formatDate(transaction.transaction_date)}</td>
                                             <td className="px-4 py-3">
-                                                <Badge variant={transaction.type === 'Receita' ? 'success' : transaction.type === 'Despesa' ? 'danger' : 'info'}>
+                                                <Badge variant={['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(transaction.type) ? 'success' : ['Despesas Diversas', 'Retirada pelo Proprietário'].includes(transaction.type) ? 'danger' : 'info'}>
                                                     {transaction.type}
                                                 </Badge>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {transaction.type === 'Depósito' || transaction.type === 'Transferência' ? (
+                                                {transaction.type === 'Transferência' ? (
                                                     <span className="text-xs">
                                                         {transaction.account?.name} <i className="fas fa-arrow-right mx-1 text-gray-400"></i> {transaction.destination_account?.name || 'Externo'}
                                                     </span>
@@ -814,7 +809,7 @@ const Financeiro: React.FC = () => {
                                             <td className="px-4 py-3">{transaction.description}</td>
                                             <td className="px-4 py-3">{transaction.client?.name || '-'}</td>
                                             <td className="px-4 py-3 font-semibold">
-                                                <span className={transaction.type === 'Receita' ? 'text-green-600' : 'text-red-600'}>
+                                                <span className={['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(transaction.type) ? 'text-green-600' : 'text-red-600'}>
                                                     {formatCurrency(transaction.amount)}
                                                 </span>
                                             </td>
@@ -972,7 +967,7 @@ const Financeiro: React.FC = () => {
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Tipo</label>
-                                <Badge variant={selectedTransaction.type === 'Receita' ? 'success' : 'danger'}>
+                                <Badge variant={['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(selectedTransaction.type) ? 'success' : 'danger'}>
                                     {selectedTransaction.type}
                                 </Badge>
                             </div>
@@ -1002,7 +997,7 @@ const Financeiro: React.FC = () => {
                             )}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Valor</label>
-                                <p className={`mt-1 text-lg font-semibold ${selectedTransaction.type === 'Receita' ? 'text-green-600' : 'text-red-600'}`}>
+                                <p className={`mt-1 text-lg font-semibold ${['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(selectedTransaction.type) ? 'text-green-600' : 'text-red-600'}`}>
                                     {formatCurrency(selectedTransaction.amount)}
                                 </p>
                             </div>
