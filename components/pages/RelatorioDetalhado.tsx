@@ -618,7 +618,7 @@ const RelatorioDetalhado: React.FC = () => {
                     </div>
                     <div class="summary-card">
                         <div class="label">💸 Despesas</div>
-                        <div class="value red">- ${formatCurrency(orderExpensesTotal)}</div>
+                        <div class="value red">- ${formatCurrency(totalExpenses)}</div>
                     </div>
                     <div class="summary-card">
                         <div class="label">💵 Valores Pagos</div>
@@ -1081,7 +1081,7 @@ const RelatorioDetalhado: React.FC = () => {
                         <i className="fas fa-receipt text-xl text-white"></i>
                     </div>
                     <p className="text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Despesas</p>
-                    <p className="text-base md:text-lg font-bold text-rose-600 leading-tight w-full truncate" title={`- ${formatCurrency(orderExpensesTotal)}`}>- {formatCurrency(orderExpensesTotal)}</p>
+                    <p className="text-base md:text-lg font-bold text-rose-600 leading-tight w-full truncate" title={`- ${formatCurrency(totalExpenses)}`}>- {formatCurrency(totalExpenses)}</p>
                 </div>
             </div>
 
