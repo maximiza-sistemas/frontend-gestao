@@ -64,6 +64,8 @@ interface FinancialAccount {
     current_balance: number;
 }
 
+type PaginationKey = 'transactions' | 'receivables' | 'payables';
+
 const formatCurrency = (value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const formatDate = (date: string) => {
     if (!date) return '-';
@@ -74,6 +76,13 @@ const formatDate = (date: string) => {
         return `${day}/${month}/${year}`;
     }
     return new Date(date).toLocaleDateString('pt-BR');
+};
+
+const getLocalDateInputValue = (date = new Date()) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
 };
 
 const KPICard: React.FC<{ title: string; value: string; icon: string; color: string; trend?: 'up' | 'down' }> = ({ title, value, icon, color, trend }) => (
@@ -99,6 +108,73 @@ const getStatusVariant = (status: string) => {
     return map[status] || 'info';
 };
 
+const PAGE_SIZE_OPTIONS = [10, 50, 100];
+
+const getPageCount = (totalItems: number, pageSize: number) => Math.max(1, Math.ceil(totalItems / pageSize));
+
+const paginateItems = <T,>(items: T[], currentPage: number, pageSize: number) => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return items.slice(startIndex, startIndex + pageSize);
+};
+
+const PaginationControls: React.FC<{
+    totalItems: number;
+    currentPage: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (pageSize: number) => void;
+}> = ({ totalItems, currentPage, pageSize, onPageChange, onPageSizeChange }) => {
+    const pageCount = getPageCount(totalItems, pageSize);
+    const startItem = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const endItem = Math.min(currentPage * pageSize, totalItems);
+
+    return (
+        <div className="mt-4 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Itens por página</span>
+                <select
+                    value={pageSize}
+                    onChange={(e) => onPageSizeChange(Number(e.target.value))}
+                    className="rounded-md border border-gray-200 bg-white px-2 py-1 text-sm font-medium text-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                >
+                    {PAGE_SIZE_OPTIONS.map(option => (
+                        <option key={option} value={option}>{option}</option>
+                    ))}
+                </select>
+            </div>
+
+            <div className="flex flex-col gap-2 text-sm text-gray-600 sm:flex-row sm:items-center">
+                <span>
+                    Mostrando {startItem}-{endItem} de {totalItems}
+                </span>
+                <div className="flex items-center gap-1">
+                    <button
+                        type="button"
+                        onClick={() => onPageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className="h-8 w-8 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Página anterior"
+                    >
+                        <i className="fas fa-chevron-left"></i>
+                    </button>
+                    <span className="min-w-20 px-2 text-center font-medium text-gray-700">
+                        {currentPage} / {pageCount}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => onPageChange(currentPage + 1)}
+                        disabled={currentPage >= pageCount}
+                        className="h-8 w-8 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Próxima página"
+                    >
+                        <i className="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const TransactionForm: React.FC<{
     onSave: (data: any) => Promise<void>;
     onClose: () => void;
@@ -110,17 +186,19 @@ const TransactionForm: React.FC<{
     transactionToEdit?: FinancialTransaction | null;
 }> = ({ onSave, onClose, categories, accounts, clients, suppliers, isLoading, transactionToEdit }) => {
     const formatDateForInput = (date: string | undefined) => {
-        if (!date) return new Date().toISOString().split('T')[0];
+        if (!date) return getLocalDateInputValue();
         if (/^\d{4}-\d{2}-\d{2}/.test(date)) return date.split('T')[0];
-        return new Date(date).toISOString().split('T')[0];
+        const parsedDate = new Date(date);
+        return Number.isNaN(parsedDate.getTime()) ? getLocalDateInputValue() : getLocalDateInputValue(parsedDate);
     };
+    const initialTransactionDate = formatDateForInput(transactionToEdit?.transaction_date);
 
     const [formData, setFormData] = useState({
         type: transactionToEdit?.type || 'Receita',
         description: transactionToEdit?.description || '',
         amount: transactionToEdit ? String(transactionToEdit.amount) : '',
-        transaction_date: formatDateForInput(transactionToEdit?.transaction_date),
-        due_date: formatDateForInput(transactionToEdit?.due_date),
+        transaction_date: initialTransactionDate,
+        due_date: initialTransactionDate,
         category_id: transactionToEdit?.category?.id ? String(transactionToEdit.category.id) : '',
         account_id: transactionToEdit?.account?.id ? String(transactionToEdit.account.id) : '',
         destination_account_id: '',
@@ -136,6 +214,14 @@ const TransactionForm: React.FC<{
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
+        if (name === 'transaction_date') {
+            setFormData(prev => ({
+                ...prev,
+                transaction_date: value,
+                due_date: value
+            }));
+            return;
+        }
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
@@ -189,6 +275,7 @@ const TransactionForm: React.FC<{
         e.preventDefault();
         onSave({
             ...formData,
+            due_date: formData.transaction_date,
             amount: parseFloat(formData.amount.replace(',', '.')),
             category_id: formData.category_id ? Number(formData.category_id) : null,
             account_id: Number(formData.account_id),
@@ -417,6 +504,12 @@ const Financeiro: React.FC = () => {
         start: '',
         end: ''
     });
+    const [pageSize, setPageSize] = useState(10);
+    const [currentPages, setCurrentPages] = useState<Record<PaginationKey, number>>({
+        transactions: 1,
+        receivables: 1,
+        payables: 1
+    });
 
     // Carregar dados iniciais
     useEffect(() => {
@@ -582,6 +675,50 @@ const Financeiro: React.FC = () => {
     // Separar receitas e despesas para as abas
     const receivables = filteredTransactions.filter(t => ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(t.type));
     const payables = filteredTransactions.filter(t => ['Despesas Diversas', 'Retirada pelo Proprietário'].includes(t.type));
+    const transactionPageCount = getPageCount(filteredTransactions.length, pageSize);
+    const receivablePageCount = getPageCount(receivables.length, pageSize);
+    const payablePageCount = getPageCount(payables.length, pageSize);
+    const transactionPage = Math.min(currentPages.transactions, transactionPageCount);
+    const receivablePage = Math.min(currentPages.receivables, receivablePageCount);
+    const payablePage = Math.min(currentPages.payables, payablePageCount);
+    const paginatedTransactions = paginateItems(filteredTransactions, transactionPage, pageSize);
+    const paginatedReceivables = paginateItems(receivables, receivablePage, pageSize);
+    const paginatedPayables = paginateItems(payables, payablePage, pageSize);
+
+    useEffect(() => {
+        setCurrentPages({
+            transactions: 1,
+            receivables: 1,
+            payables: 1
+        });
+    }, [searchTerm, typeFilter, statusFilter, dateRange.start, dateRange.end, pageSize]);
+
+    useEffect(() => {
+        setCurrentPages(prev => {
+            const next = {
+                transactions: Math.min(prev.transactions, transactionPageCount),
+                receivables: Math.min(prev.receivables, receivablePageCount),
+                payables: Math.min(prev.payables, payablePageCount)
+            };
+
+            return next.transactions === prev.transactions &&
+                next.receivables === prev.receivables &&
+                next.payables === prev.payables
+                ? prev
+                : next;
+        });
+    }, [transactionPageCount, receivablePageCount, payablePageCount]);
+
+    const handlePageSizeChange = (newPageSize: number) => {
+        setPageSize(newPageSize);
+    };
+
+    const handlePageChange = (key: PaginationKey, page: number) => {
+        setCurrentPages(prev => ({
+            ...prev,
+            [key]: page
+        }));
+    };
 
     const clearFilters = () => {
         setSearchTerm('');
@@ -594,10 +731,20 @@ const Financeiro: React.FC = () => {
             start: '',
             end: ''
         });
+        setCurrentPages({
+            transactions: 1,
+            receivables: 1,
+            payables: 1
+        });
     };
 
     const showAllTransactions = () => {
         setDateRange({ start: '', end: '' });
+        setCurrentPages({
+            transactions: 1,
+            receivables: 1,
+            payables: 1
+        });
     };
 
     return (
@@ -751,14 +898,14 @@ const Financeiro: React.FC = () => {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-4">Carregando...</td>
+                                        <td colSpan={9} className="text-center py-4">Carregando...</td>
                                     </tr>
                                 ) : filteredTransactions.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-4">Nenhuma transação encontrada</td>
+                                        <td colSpan={9} className="text-center py-4">Nenhuma transação encontrada</td>
                                     </tr>
                                 ) : (
-                                    filteredTransactions.map(transaction => (
+                                    paginatedTransactions.map(transaction => (
                                         <tr key={transaction.id} className="border-b hover:bg-gray-50">
                                             <td className="px-4 py-3">{transaction.transaction_code}</td>
                                             <td className="px-4 py-3">{formatDate(transaction.transaction_date)}</td>
@@ -801,6 +948,15 @@ const Financeiro: React.FC = () => {
                                 )}
                             </tbody>
                         </table>
+                        {filteredTransactions.length > 0 && (
+                            <PaginationControls
+                                totalItems={filteredTransactions.length}
+                                currentPage={transactionPage}
+                                pageSize={pageSize}
+                                onPageChange={(page) => handlePageChange('transactions', page)}
+                                onPageSizeChange={handlePageSizeChange}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -810,7 +966,7 @@ const Financeiro: React.FC = () => {
                             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
                                     <th className="px-4 py-3">Código</th>
-                                    <th className="px-4 py-3">Vencimento</th>
+                                    <th className="px-4 py-3">Data</th>
                                     <th className="px-4 py-3">Cliente</th>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3">Valor</th>
@@ -824,10 +980,10 @@ const Financeiro: React.FC = () => {
                                         <td colSpan={7} className="text-center py-4">Nenhuma conta a receber</td>
                                     </tr>
                                 ) : (
-                                    receivables.map(transaction => (
+                                    paginatedReceivables.map(transaction => (
                                         <tr key={transaction.id} className="border-b hover:bg-gray-50">
                                             <td className="px-4 py-3">{transaction.transaction_code}</td>
-                                            <td className="px-4 py-3">{transaction.due_date ? formatDate(transaction.due_date) : '-'}</td>
+                                            <td className="px-4 py-3">{formatDate(transaction.transaction_date)}</td>
                                             <td className="px-4 py-3">{transaction.client?.name || '-'}</td>
                                             <td className="px-4 py-3">{transaction.description}</td>
                                             <td className="px-4 py-3 font-semibold text-green-600">
@@ -851,6 +1007,15 @@ const Financeiro: React.FC = () => {
                                 )}
                             </tbody>
                         </table>
+                        {receivables.length > 0 && (
+                            <PaginationControls
+                                totalItems={receivables.length}
+                                currentPage={receivablePage}
+                                pageSize={pageSize}
+                                onPageChange={(page) => handlePageChange('receivables', page)}
+                                onPageSizeChange={handlePageSizeChange}
+                            />
+                        )}
                     </div>
                 )}
 
@@ -860,7 +1025,7 @@ const Financeiro: React.FC = () => {
                             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
                                 <tr>
                                     <th className="px-4 py-3">Código</th>
-                                    <th className="px-4 py-3">Vencimento</th>
+                                    <th className="px-4 py-3">Data</th>
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3">Valor</th>
                                     <th className="px-4 py-3">Status</th>
@@ -873,10 +1038,10 @@ const Financeiro: React.FC = () => {
                                         <td colSpan={6} className="text-center py-4">Nenhuma conta a pagar</td>
                                     </tr>
                                 ) : (
-                                    payables.map(transaction => (
+                                    paginatedPayables.map(transaction => (
                                         <tr key={transaction.id} className="border-b hover:bg-gray-50">
                                             <td className="px-4 py-3">{transaction.transaction_code}</td>
-                                            <td className="px-4 py-3">{transaction.due_date ? formatDate(transaction.due_date) : '-'}</td>
+                                            <td className="px-4 py-3">{formatDate(transaction.transaction_date)}</td>
                                             <td className="px-4 py-3">{transaction.description}</td>
                                             <td className="px-4 py-3 font-semibold text-red-600">
                                                 {formatCurrency(transaction.amount)}
@@ -899,6 +1064,15 @@ const Financeiro: React.FC = () => {
                                 )}
                             </tbody>
                         </table>
+                        {payables.length > 0 && (
+                            <PaginationControls
+                                totalItems={payables.length}
+                                currentPage={payablePage}
+                                pageSize={pageSize}
+                                onPageChange={(page) => handlePageChange('payables', page)}
+                                onPageSizeChange={handlePageSizeChange}
+                            />
+                        )}
                     </div>
                 )}
 
