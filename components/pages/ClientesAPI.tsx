@@ -29,6 +29,21 @@ interface Client {
     total_spent?: number;
 }
 
+const clientTableHeaderClass = 'sticky top-[-1.5rem] z-50 border-b border-gray-200 bg-gray-50 px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider shadow-sm md:top-[-2.5rem]';
+
+const formatLocalDate = (dateString?: string) => {
+    if (!dateString) return '-';
+
+    const datePart = dateString.split('T')[0];
+    if (/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+        const [year, month, day] = datePart.split('-');
+        return `${day}/${month}/${year}`;
+    }
+
+    const parsedDate = new Date(dateString);
+    return Number.isNaN(parsedDate.getTime()) ? '-' : parsedDate.toLocaleDateString('pt-BR');
+};
+
 const ClientForm: React.FC<{
     onSave: (client: Partial<Client>) => void;
     onClose: () => void;
@@ -311,7 +326,7 @@ const HistoryModal: React.FC<{
     };
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('pt-BR');
+        return formatLocalDate(dateString);
     };
 
     return (
@@ -506,7 +521,7 @@ const ClientesAPI: React.FC = () => {
     };
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('pt-BR');
+        return formatLocalDate(dateString);
     };
 
     if (loading) {
@@ -586,30 +601,30 @@ const ClientesAPI: React.FC = () => {
                 />
             </div>
 
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-                <div className="overflow-x-auto">
+            <div className="bg-white rounded-lg shadow">
+                <div className="overflow-x-auto md:overflow-visible">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Cliente
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Tipo
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Contato
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Status
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Saldo em Aberto
                                 </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-left`}>
                                     Última Compra
                                 </th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                <th className={`${clientTableHeaderClass} text-right`}>
                                     Ações
                                 </th>
                             </tr>
