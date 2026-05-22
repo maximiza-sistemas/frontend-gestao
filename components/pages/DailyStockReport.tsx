@@ -22,6 +22,11 @@ interface ReportUnit {
   helper_name: string;
 }
 
+interface ClientNote {
+  client: string;
+  note: string;
+}
+
 interface LocationOption {
   id: number;
   name: string;
@@ -37,6 +42,7 @@ interface SavedReport {
   units: ReportUnit[];
   liquido: ReportLine[];
   vasilhame: ReportLine[];
+  client_notes?: ClientNote[];
   notes?: string;
 }
 
@@ -74,6 +80,8 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
   const [units, setUnits] = useState<ReportUnit[]>([emptyUnit()]);
   const [liquido, setLiquido] = useState<ReportLine[]>([]);
   const [vasilhame, setVasilhame] = useState<ReportLine[]>([]);
+  const [clientNotes, setClientNotes] = useState<ClientNote[]>([]);
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
   const [currentReportId, setCurrentReportId] = useState<number | null>(null);
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
@@ -95,6 +103,7 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
         units: typeof r.units === 'string' ? JSON.parse(r.units) : r.units || [],
         liquido: typeof r.liquido === 'string' ? JSON.parse(r.liquido) : r.liquido || [],
         vasilhame: typeof r.vasilhame === 'string' ? JSON.parse(r.vasilhame) : r.vasilhame || [],
+        client_notes: typeof r.client_notes === 'string' ? JSON.parse(r.client_notes) : r.client_notes || [],
       }));
       setSavedReports(parsed);
     }
@@ -104,6 +113,14 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
     api.getLocations().then((res) => {
       if (res.success) {
         setLocations((res.data || []).map((l: any) => ({ id: l.id, name: l.name, city: l.city })));
+      }
+    });
+    api.getClients({ limit: 500 }).then((res) => {
+      if (res.success) {
+        const names = ((res.data as any[]) || [])
+          .map((c: any) => c.name)
+          .filter((n: any): n is string => typeof n === 'string' && n.trim().length > 0);
+        setClientOptions(Array.from(new Set(names)).sort());
       }
     });
     fetchSavedReports();
@@ -164,10 +181,16 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
   const addUnit = () => setUnits((prev) => [...prev, emptyUnit()]);
   const removeUnit = (index: number) => setUnits((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
 
+  const addClientNote = () => setClientNotes((prev) => [...prev, { client: '', note: '' }]);
+  const updateClientNote = (index: number, field: keyof ClientNote, value: string) =>
+    setClientNotes((prev) => prev.map((n, i) => (i === index ? { ...n, [field]: value } : n)));
+  const removeClientNote = (index: number) => setClientNotes((prev) => prev.filter((_, i) => i !== index));
+
   const startNewReport = () => {
     setCurrentReportId(null);
     setNotes('');
     setUnits([emptyUnit()]);
+    setClientNotes([]);
     loadPrefill();
   };
 
@@ -178,6 +201,7 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
     setUnits(report.units && report.units.length > 0 ? report.units : [emptyUnit()]);
     setLiquido(report.liquido || []);
     setVasilhame(report.vasilhame || []);
+    setClientNotes(report.client_notes || []);
     setNotes(report.notes || '');
     showMessage(`Relatório de ${formatDateBR(report.report_date)} carregado.`, 'info');
   };
@@ -196,6 +220,7 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
         units: units.filter((u) => u.unit_name || u.driver_name || u.route_name),
         liquido,
         vasilhame,
+        client_notes: clientNotes.filter((n) => n.client.trim() || n.note.trim()),
       };
 
       const res = currentReportId
@@ -352,6 +377,25 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
       },
     });
 
+    // 4. Observações dos Clientes
+    const clientNoteRows = clientNotes.filter((n) => n.client.trim() || n.note.trim());
+    if (clientNoteRows.length > 0) {
+      const cnY = docAny.lastAutoTable.finalY + 18;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.text('4. Observações dos Clientes', 40, cnY);
+      docAny.autoTable({
+        startY: cnY + 6,
+        head: [['Cliente', 'Observação']],
+        body: clientNoteRows.map((n) => [n.client || '-', n.note || '']),
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 4, valign: 'top' },
+        headStyles: { fillColor: [245, 247, 250], textColor: 33, fontStyle: 'bold' },
+        columnStyles: { 0: { cellWidth: 150, fontStyle: 'bold' } },
+        margin: { left: 40, right: 40 },
+      });
+    }
+
     const dateSafe = formatDateBR(reportDate).replace(/\./g, '-');
     doc.save(`relatorio-venda-diaria-${dateSafe}.pdf`);
     showMessage('Relatório PDF exportado com sucesso!', 'success');
@@ -387,6 +431,16 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
     };
     matrixCsv('2. Estoque Líquido', liquido);
     matrixCsv('3. Estoque Vasilhame', vasilhame);
+
+    const clientNoteRows = clientNotes.filter((n) => n.client.trim() || n.note.trim());
+    if (clientNoteRows.length > 0) {
+      lines.push('');
+      lines.push('4. Observações dos Clientes');
+      lines.push(['Cliente', 'Observação'].join(sep));
+      clientNoteRows.forEach((n) =>
+        lines.push([`"${(n.client || '').replace(/"/g, '""')}"`, `"${(n.note || '').replace(/"/g, '""')}"`].join(sep))
+      );
+    }
 
     const csvContent = '﻿' + lines.join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -657,6 +711,62 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
 
       {/* 3. Estoque Vasilhame */}
       {renderMatrix('Estoque Vasilhame', '3', 'vasilhame', vasilhame, 'bg-blue-50')}
+
+      {/* 4. Observações dos Clientes */}
+      <datalist id="daily-report-client-options">
+        {clientOptions.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 bg-orange-50 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800">
+            <span className="text-gray-500 mr-2">4.</span>Observações dos Clientes
+          </h3>
+          <button
+            onClick={addClientNote}
+            className="text-sm text-orange-600 hover:text-orange-800 font-medium flex items-center gap-1"
+          >
+            <i className="fa-solid fa-plus" />
+            Adicionar observação
+          </button>
+        </div>
+        <div className="p-4 space-y-2">
+          {clientNotes.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">
+              Nenhuma observação. Clique em "Adicionar observação" para incluir uma linha por cliente.
+            </p>
+          ) : (
+            clientNotes.map((cn, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <span className="text-xs text-gray-400 w-5 text-right">{index + 1}.</span>
+                <input
+                  type="text"
+                  list="daily-report-client-options"
+                  value={cn.client}
+                  onChange={(e) => updateClientNote(index, 'client', e.target.value)}
+                  placeholder="Cliente"
+                  className="w-56 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-orange-400 focus:ring-1 focus:ring-orange-400 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  value={cn.note}
+                  onChange={(e) => updateClientNote(index, 'note', e.target.value)}
+                  placeholder="Observação..."
+                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:border-orange-400 focus:ring-1 focus:ring-orange-400 focus:outline-none"
+                />
+                <button
+                  onClick={() => removeClientNote(index)}
+                  className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                  title="Remover observação"
+                >
+                  <i className="fa-solid fa-times" />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
 
       {/* Observações */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
