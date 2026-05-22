@@ -8,6 +8,7 @@ import Toast from '../common/Toast';
 import ProductFormModal from '../common/ProductFormModal';
 import StockAdjustModal from '../common/StockAdjustModal';
 import ContainerLoanFormModal from '../common/ContainerLoanFormModal';
+import DailyStockReport from './DailyStockReport';
 import { ContainerLoan, ContainerLoanStats } from '../../types';
 
 const EstoqueAPI: React.FC = () => {
@@ -760,6 +761,17 @@ const EstoqueAPI: React.FC = () => {
             </div>
           </div>
 
+          {/* Relatório de Venda Diária (layout matricial) */}
+          <DailyStockReport showMessage={showMessage} />
+
+          {/* Detalhamento e ajuste de estoque por localização (colapsável) */}
+          <details className="bg-white rounded-lg shadow-sm border border-gray-200 group">
+            <summary className="cursor-pointer select-none px-4 py-3 font-medium text-gray-700 flex items-center gap-2">
+              <i className="fa-solid fa-chevron-right transition-transform group-open:rotate-90 text-gray-400"></i>
+              <i className="fa-solid fa-sliders text-orange-500"></i>
+              Ajustar estoque por localização (detalhado)
+            </summary>
+            <div className="px-4 pb-4 space-y-4">
           <FilterBar
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
@@ -875,6 +887,8 @@ const EstoqueAPI: React.FC = () => {
               </table>
             </div>
           </div>
+            </div>
+          </details>
         </>
       )}
 

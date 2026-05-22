@@ -1196,6 +1196,47 @@ class ApiService {
   async toggleLocationStatus(id: number): Promise<ApiResponse> {
     return this.patch(`/locations/${id}/toggle-status`);
   }
+
+  // ====================================
+  // RELATÓRIO DE VENDA DIÁRIA
+  // ====================================
+
+  async getDailyReports(params?: { location_id?: number; date_from?: string; date_to?: string; limit?: number }): Promise<ApiResponse> {
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          searchParams.append(key, value.toString());
+        }
+      });
+    }
+    const queryString = searchParams.toString();
+    return this.get(`/daily-reports${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getDailyReport(id: number): Promise<ApiResponse> {
+    return this.get(`/daily-reports/${id}`);
+  }
+
+  async getDailyReportPrefill(date: string, locationId?: number): Promise<ApiResponse> {
+    const searchParams = new URLSearchParams({ date });
+    if (locationId) {
+      searchParams.append('location_id', locationId.toString());
+    }
+    return this.get(`/daily-reports/prefill?${searchParams.toString()}`);
+  }
+
+  async createDailyReport(data: any): Promise<ApiResponse> {
+    return this.post('/daily-reports', data);
+  }
+
+  async updateDailyReport(id: number, data: any): Promise<ApiResponse> {
+    return this.put(`/daily-reports/${id}`, data);
+  }
+
+  async deleteDailyReport(id: number): Promise<ApiResponse> {
+    return this.delete(`/daily-reports/${id}`);
+  }
 }
 
 // Exportar instância única da API
