@@ -223,13 +223,13 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
         client_notes: clientNotes.filter((n) => n.client.trim() || n.note.trim()),
       };
 
-      const res = currentReportId
-        ? await api.updateDailyReport(currentReportId, payload)
-        : await api.createDailyReport(payload);
+      // Sempre cria um novo registro no histórico (não sobrescreve), para
+      // preservar o histórico de movimentação do estoque ao longo do tempo.
+      const res = await api.createDailyReport(payload);
 
       if (res.success) {
-        showMessage(currentReportId ? 'Relatório atualizado com sucesso!' : 'Relatório salvo com sucesso!', 'success');
-        if (res.data?.id) setCurrentReportId(res.data.id);
+        showMessage('Relatório salvo no histórico com sucesso!', 'success');
+        if ((res.data as any)?.id) setCurrentReportId((res.data as any).id);
         fetchSavedReports();
       } else {
         showMessage(res.error || 'Erro ao salvar relatório', 'error');
@@ -241,13 +241,12 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
     }
   };
 
-  const handleDeleteReport = async () => {
-    if (!currentReportId) return;
-    if (!confirm('Deseja realmente excluir este relatório salvo?')) return;
-    const res = await api.deleteDailyReport(currentReportId);
+  const handleDeleteReport = async (id: number) => {
+    if (!confirm('Deseja realmente excluir este relatório do histórico?')) return;
+    const res = await api.deleteDailyReport(id);
     if (res.success) {
-      showMessage('Relatório excluído.', 'success');
-      startNewReport();
+      showMessage('Relatório excluído do histórico.', 'success');
+      if (currentReportId === id) setCurrentReportId(null);
       fetchSavedReports();
     } else {
       showMessage(res.error || 'Erro ao excluir relatório', 'error');
@@ -258,6 +257,7 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
   const columnSum = (lines: ReportLine[], field: 'previous' | 'entry' | 'exit') =>
     lines.reduce((sum, l) => sum + (l[field] || 0), 0);
   const grandTotal = (lines: ReportLine[]) => lines.reduce((sum, l) => sum + lineTotal(l), 0);
+  const reportTotal = (lines?: ReportLine[]) => (lines || []).reduce((sum, l) => sum + lineTotal(l), 0);
 
   // ====================================
   // EXPORTAÇÃO PDF (modelo "Relatório de Venda Diária")
@@ -580,27 +580,6 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
             {loading ? 'Carregando...' : 'Carregar do estoque'}
           </Button>
 
-          {savedReports.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">Abrir relatório salvo</label>
-              <select
-                value={currentReportId ?? ''}
-                onChange={(e) => {
-                  const r = savedReports.find((s) => s.id === Number(e.target.value));
-                  if (r) loadReport(r);
-                }}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-orange-400 focus:ring-1 focus:ring-orange-400 focus:outline-none"
-              >
-                <option value="">— Selecione —</option>
-                {savedReports.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {formatDateBR(r.report_date)} {r.location_name ? `· ${r.location_name}` : '· Consolidado'}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
           <div className="flex-1" />
 
           <Button variant="secondary" icon="fa-solid fa-file-circle-plus" onClick={startNewReport}>
@@ -634,20 +613,18 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
             )}
           </div>
 
-          {currentReportId && (
-            <Button variant="danger" icon="fa-solid fa-trash" onClick={handleDeleteReport}>
-              Excluir
-            </Button>
-          )}
-
           <Button variant="primary" icon="fa-solid fa-floppy-disk" onClick={handleSave} disabled={saving}>
-            {saving ? 'Salvando...' : currentReportId ? 'Atualizar' : 'Salvar'}
+            {saving ? 'Salvando...' : 'Salvar no histórico'}
           </Button>
         </div>
+        <p className="mt-2 text-xs text-gray-500">
+          <i className="fa-solid fa-circle-info mr-1" />
+          Cada "Salvar" cria um novo registro no histórico (não sobrescreve), permitindo acompanhar a movimentação do estoque ao longo do tempo.
+        </p>
         {currentReportId && (
-          <p className="mt-2 text-xs text-orange-600">
-            <i className="fa-solid fa-pen-to-square mr-1" />
-            Editando relatório salvo #{currentReportId}. As alterações sobrescrevem o registro.
+          <p className="mt-1 text-xs text-orange-600">
+            <i className="fa-solid fa-clock-rotate-left mr-1" />
+            Formulário vinculado ao registro #{currentReportId} do histórico ({formatDateBR(reportDate)}). Salvar cria um novo registro — o original é mantido.
           </p>
         )}
       </div>
@@ -778,6 +755,77 @@ const DailyStockReport: React.FC<DailyStockReportProps> = ({ showMessage }) => {
           placeholder="Observações do dia (opcional)..."
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:border-orange-400 focus:ring-1 focus:ring-orange-400 focus:outline-none"
         />
+      </div>
+
+      {/* Histórico de Movimentação */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <h3 className="font-semibold text-gray-800">
+            <i className="fa-solid fa-clock-rotate-left mr-2 text-orange-500" />
+            Histórico de Movimentação
+          </h3>
+          <span className="text-xs text-gray-400">{savedReports.length} registro(s)</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Data</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Unidade</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Total Líquido</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Total Vasilhame</th>
+                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Registrado por</th>
+                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-500 uppercase">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {savedReports.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-gray-400">
+                    <i className="fa-solid fa-inbox text-3xl mb-2 block" />
+                    Nenhum relatório salvo ainda. Preencha as informações e clique em "Salvar no histórico".
+                  </td>
+                </tr>
+              ) : (
+                savedReports.map((r) => (
+                  <tr key={r.id} className={currentReportId === r.id ? 'bg-orange-50' : 'hover:bg-gray-50'}>
+                    <td className="px-4 py-2 text-sm font-medium text-gray-900 whitespace-nowrap">
+                      {formatDateBR(r.report_date)}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-700">
+                      {r.location_name || r.units?.[0]?.unit_name || 'Consolidado'}
+                    </td>
+                    <td className="px-4 py-2 text-center text-sm font-semibold text-green-700">
+                      {reportTotal(r.liquido)}
+                    </td>
+                    <td className="px-4 py-2 text-center text-sm font-semibold text-blue-700">
+                      {reportTotal(r.vasilhame)}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-500">{r.user_name || '-'}</td>
+                    <td className="px-4 py-2 text-center whitespace-nowrap">
+                      <div className="flex justify-center gap-1">
+                        <button
+                          onClick={() => loadReport(r)}
+                          className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded"
+                          title="Abrir / visualizar"
+                        >
+                          <i className="fa-solid fa-folder-open" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteReport(r.id)}
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                          title="Excluir do histórico"
+                        >
+                          <i className="fa-solid fa-trash" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
