@@ -47,6 +47,11 @@ interface FinancialSummary {
     pending_revenue: number;
     pending_expenses: number;
     overdue_amount: number;
+    total_venda_pix: number;
+    total_venda_cartao: number;
+    total_venda_vale: number;
+    total_retirada_proprietario: number;
+    cash_balance: number;
 }
 
 interface FinancialCategory {
@@ -523,18 +528,23 @@ const Financeiro: React.FC = () => {
             const defaultStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toLocaleDateString('en-CA');
             const defaultEnd = new Date().toLocaleDateString('en-CA');
 
-            const cashFlowStart = dateRange.start || defaultStart;
-            const cashFlowEnd = dateRange.end || defaultEnd;
+            // Se apenas uma das datas for informada, trata como filtro de um único dia
+            // (evita "intervalo aberto" trazendo datas posteriores à data escolhida).
+            const effectiveStart = dateRange.start || dateRange.end || undefined;
+            const effectiveEnd = dateRange.end || dateRange.start || undefined;
+
+            const cashFlowStart = effectiveStart || defaultStart;
+            const cashFlowEnd = effectiveEnd || defaultEnd;
 
             // Carregar todas as informações em paralelo
             const [transactionsRes, summaryRes, categoriesRes, accountsRes, cashFlowRes, clientsRes, suppliersRes] = await Promise.all([
                 api.getFinancialTransactions({
-                    date_from: dateRange.start,
-                    date_to: dateRange.end
+                    date_from: effectiveStart,
+                    date_to: effectiveEnd
                 }),
                 api.getFinancialSummary({
-                    date_from: dateRange.start || undefined,
-                    date_to: dateRange.end || undefined
+                    date_from: effectiveStart,
+                    date_to: effectiveEnd
                 }),
                 api.getFinancialCategories(),
                 api.getFinancialAccounts(),
@@ -672,8 +682,13 @@ const Financeiro: React.FC = () => {
         });
     }, [transactions, searchTerm, typeFilter, statusFilter]);
 
-    // Separar receitas e despesas para as abas
-    const receivables = filteredTransactions.filter(t => ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(t.type));
+    // Separar receitas e despesas para as abas.
+    // Contas a Receber: apenas as que possuem valor em aberto (Pendente/Vencido).
+    // Ao marcar como "Pago", o item sai automaticamente desta lista (os dados são recarregados).
+    const receivables = filteredTransactions.filter(t =>
+        ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix'].includes(t.type) &&
+        ['Pendente', 'Vencido'].includes(t.status)
+    );
     const payables = filteredTransactions.filter(t => ['Despesas Diversas', 'Retirada pelo Proprietário'].includes(t.type));
     const transactionPageCount = getPageCount(filteredTransactions.length, pageSize);
     const receivablePageCount = getPageCount(receivables.length, pageSize);
@@ -747,13 +762,219 @@ const Financeiro: React.FC = () => {
         });
     };
 
+    // ====================================
+    // EXPORTAÇÃO (respeita os filtros atuais — todas as páginas da aba ativa)
+    // ====================================
+    const [showExportMenu, setShowExportMenu] = useState(false);
+
+    const getExportContext = () => {
+        switch (activeTab) {
+            case 'Contas a Receber':
+                return { key: 'contas-a-receber', label: 'Contas a Receber', rows: receivables as any[], cashFlow: false as const };
+            case 'Contas a Pagar':
+                return { key: 'contas-a-pagar', label: 'Contas a Pagar', rows: payables as any[], cashFlow: false as const };
+            case 'Fluxo de Caixa':
+                return { key: 'fluxo-de-caixa', label: 'Fluxo de Caixa', rows: cashFlowData as any[], cashFlow: true as const };
+            case 'Transações':
+            default:
+                return { key: 'transacoes', label: 'Transações', rows: filteredTransactions as any[], cashFlow: false as const };
+        }
+    };
+
+    const buildExportMeta = () => {
+        const parts: string[] = [];
+        parts.push(
+            (dateRange.start || dateRange.end)
+                ? `Período: ${dateRange.start ? formatDate(dateRange.start) : '...'} a ${dateRange.end ? formatDate(dateRange.end) : '...'}`
+                : 'Período: Todas as datas'
+        );
+        if (typeFilter !== 'Todos') parts.push(`Tipo: ${typeFilter}`);
+        if (statusFilter !== 'Todos') parts.push(`Status: ${statusFilter}`);
+        if (searchTerm) parts.push(`Busca: "${searchTerm}"`);
+        return parts;
+    };
+
+    const dateStampForFile = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    // KPIs do período (mesmos cards exibidos na tela)
+    const getKpiRows = (): [string, number][] => [
+        ['Total de Receitas', summary?.total_revenue || 0],
+        ['Total de Despesas', summary?.total_expenses || 0],
+        ['Saldo no Caixa', summary?.cash_balance || 0],
+        ['Retirada pelo Proprietário', summary?.total_retirada_proprietario || 0],
+        ['Total de Venda no Pix', summary?.total_venda_pix || 0],
+        ['Total de Venda no Cartão', summary?.total_venda_cartao || 0],
+        ['Total de Venda no Vale', summary?.total_venda_vale || 0],
+    ];
+
+    const handleExportPDF = () => {
+        const jsPdfFactory = (window as any).jspdf?.jsPDF;
+        if (!jsPdfFactory) {
+            setToast({ message: 'Biblioteca de PDF não encontrada. Verifique sua conexão.', type: 'error' });
+            return;
+        }
+        const ctx = getExportContext();
+        if (!ctx.rows || ctx.rows.length === 0) {
+            setToast({ message: 'Nenhum dado para exportar com o filtro atual.', type: 'error' });
+            return;
+        }
+
+        const doc = new jsPdfFactory({ unit: 'pt', format: 'a4', orientation: 'landscape', compress: true });
+        const docAny = doc as any;
+        const pageWidth = doc.internal.pageSize.getWidth();
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(15);
+        doc.text(`RELATÓRIO FINANCEIRO — ${ctx.label}`, 40, 40);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        const meta = buildExportMeta();
+        meta.push(`Emitido em: ${new Date().toLocaleString('pt-BR')}`);
+        meta.forEach((line, i) => doc.text(line, 40, 58 + i * 13));
+        const kpiTop = 58 + meta.length * 13 + 8;
+
+        // Resumo do Período (KPIs) — em pares (label/valor) por linha
+        const kpis = getKpiRows();
+        const kpiBody: any[] = [];
+        for (let i = 0; i < kpis.length; i += 2) {
+            const a = kpis[i];
+            const b = kpis[i + 1];
+            kpiBody.push([a[0], formatCurrency(a[1]), b ? b[0] : '', b ? formatCurrency(b[1]) : '']);
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Resumo do Período', 40, kpiTop);
+        docAny.autoTable({
+            startY: kpiTop + 6,
+            head: [['Indicador', 'Valor', 'Indicador', 'Valor']],
+            body: kpiBody,
+            theme: 'grid',
+            styles: { fontSize: 9, cellPadding: 4 },
+            headStyles: { fillColor: [55, 65, 81], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' }, 2: { fontStyle: 'bold' }, 3: { halign: 'right' } },
+            margin: { left: 40, right: 40 },
+        });
+
+        const detailTop = docAny.lastAutoTable.finalY + 16;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text(`Detalhamento — ${ctx.label}`, 40, detailTop);
+        const mainTableTop = detailTop + 6;
+
+        if (ctx.cashFlow) {
+            const body = ctx.rows.map((r: any) => [
+                r.date,
+                formatCurrency(r.receitas || 0),
+                formatCurrency(r.despesas || 0),
+                formatCurrency(r.saldo || 0),
+            ]);
+            docAny.autoTable({
+                startY: mainTableTop,
+                head: [['Data', 'Receitas', 'Despesas', 'Saldo']],
+                body,
+                theme: 'grid',
+                styles: { fontSize: 9, cellPadding: 4 },
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+                margin: { left: 40, right: 40 },
+            });
+        } else {
+            const total = ctx.rows.reduce((s, t) => s + Number(t.amount || 0), 0);
+            const body = ctx.rows.map((t) => [
+                t.transaction_code,
+                formatDate(t.transaction_date),
+                t.type,
+                t.account?.name || '-',
+                t.description,
+                t.client?.name || '-',
+                formatCurrency(t.amount),
+                t.status,
+            ]);
+            body.push(['', '', '', '', '', 'TOTAL', formatCurrency(total), '']);
+            docAny.autoTable({
+                startY: mainTableTop,
+                head: [['Código', 'Data', 'Tipo', 'Conta', 'Descrição', 'Cliente', 'Valor', 'Status']],
+                body,
+                theme: 'grid',
+                styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+                headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+                columnStyles: { 6: { halign: 'right' } },
+                didParseCell: (data: any) => {
+                    if (data.section === 'body' && data.row.index === body.length - 1) {
+                        data.cell.styles.fontStyle = 'bold';
+                        data.cell.styles.fillColor = [243, 244, 246];
+                    }
+                },
+                margin: { left: 40, right: 40 },
+                didDrawPage: () => {
+                    doc.setFontSize(8);
+                    doc.setTextColor(150);
+                    doc.text(`Página ${doc.getNumberOfPages()}`, pageWidth - 70, doc.internal.pageSize.getHeight() - 18);
+                },
+            });
+        }
+
+        doc.save(`financeiro-${ctx.key}-${dateStampForFile()}.pdf`);
+        setToast({ message: `Exportado ${ctx.rows.length} registro(s) em PDF.`, type: 'success' });
+        setShowExportMenu(false);
+    };
+
+    const handleExportCSV = () => {
+        const ctx = getExportContext();
+        if (!ctx.rows || ctx.rows.length === 0) {
+            setToast({ message: 'Nenhum dado para exportar com o filtro atual.', type: 'error' });
+            return;
+        }
+        const sep = ';';
+        const esc = (v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+        const num = (v: any) => Number(v || 0).toFixed(2).replace('.', ',');
+        const lines: string[] = [];
+        lines.push(`RELATÓRIO FINANCEIRO - ${ctx.label}`);
+        buildExportMeta().forEach((m) => lines.push(m));
+        lines.push('');
+
+        lines.push('Resumo do Período (KPIs)');
+        getKpiRows().forEach(([label, val]) => lines.push([esc(label), num(val)].join(sep)));
+        lines.push('');
+
+        if (ctx.cashFlow) {
+            lines.push(['Data', 'Receitas', 'Despesas', 'Saldo'].join(sep));
+            ctx.rows.forEach((r) => lines.push([esc(r.date), num(r.receitas), num(r.despesas), num(r.saldo)].join(sep)));
+        } else {
+            lines.push(['Código', 'Data', 'Tipo', 'Conta', 'Descrição', 'Cliente', 'Valor', 'Status'].join(sep));
+            ctx.rows.forEach((t) => lines.push([
+                esc(t.transaction_code), esc(formatDate(t.transaction_date)), esc(t.type),
+                esc(t.account?.name || '-'), esc(t.description), esc(t.client?.name || '-'),
+                num(t.amount), esc(t.status),
+            ].join(sep)));
+            const total = ctx.rows.reduce((s, t) => s + Number(t.amount || 0), 0);
+            lines.push(['', '', '', '', '', esc('TOTAL'), num(total), ''].join(sep));
+        }
+
+        const csv = '﻿' + lines.join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `financeiro-${ctx.key}-${dateStampForFile()}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setToast({ message: `Exportado ${ctx.rows.length} registro(s) em CSV.`, type: 'success' });
+        setShowExportMenu(false);
+    };
+
     return (
         <>
             <div className="space-y-6">
                 <PageHeader title="Gestão Financeira" />
 
-                {/* KPIs - Layout com ícone no topo */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPIs - Layout com ícone no topo (duas linhas: 4 + 3) */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     <KPICard
                         title="Total de Receitas"
                         value={formatCurrency(summary?.total_revenue || 0)}
@@ -767,16 +988,34 @@ const Financeiro: React.FC = () => {
                         color="bg-rose-500"
                     />
                     <KPICard
-                        title="Saldo Atual"
-                        value={formatCurrency(summary?.balance || 0)}
-                        icon="fas fa-wallet"
+                        title="Saldo no Caixa"
+                        value={formatCurrency(summary?.cash_balance || 0)}
+                        icon="fas fa-cash-register"
                         color="bg-blue-500"
                     />
                     <KPICard
-                        title="A Receber"
-                        value={formatCurrency(summary?.pending_revenue || 0)}
-                        icon="fas fa-clock"
-                        color="bg-amber-500"
+                        title="Retirada pelo Proprietário"
+                        value={formatCurrency(summary?.total_retirada_proprietario || 0)}
+                        icon="fas fa-money-bill-wave"
+                        color="bg-purple-500"
+                    />
+                    <KPICard
+                        title="Total de Venda no Pix"
+                        value={formatCurrency(summary?.total_venda_pix || 0)}
+                        icon="fas fa-qrcode"
+                        color="bg-teal-500"
+                    />
+                    <KPICard
+                        title="Total de Venda no Cartão"
+                        value={formatCurrency(summary?.total_venda_cartao || 0)}
+                        icon="fas fa-credit-card"
+                        color="bg-indigo-500"
+                    />
+                    <KPICard
+                        title="Total de Venda no Vale"
+                        value={formatCurrency(summary?.total_venda_vale || 0)}
+                        icon="fas fa-receipt"
+                        color="bg-orange-500"
                     />
                 </div>
 
@@ -857,8 +1096,40 @@ const Financeiro: React.FC = () => {
                             Limpar
                         </button>
 
-                        {/* Botão Nova Transação - Destaque */}
-                        <div className="flex-1 flex justify-end">
+                        {/* Exportar (conforme filtro) + Nova Transação */}
+                        <div className="flex-1 flex justify-end items-center gap-2">
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowExportMenu(v => !v)}
+                                    className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
+                                    title="Exportar todos os registros do filtro atual"
+                                >
+                                    <i className="fas fa-file-export"></i>
+                                    Exportar
+                                    <i className="fas fa-chevron-down text-xs"></i>
+                                </button>
+                                {showExportMenu && (
+                                    <>
+                                        <div className="fixed inset-0 z-10" onClick={() => setShowExportMenu(false)} />
+                                        <div className="absolute right-0 mt-2 w-44 bg-white rounded-lg shadow-lg border border-gray-200 z-20 py-1">
+                                            <button
+                                                onClick={handleExportPDF}
+                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-file-pdf text-red-500"></i>
+                                                Exportar PDF
+                                            </button>
+                                            <button
+                                                onClick={handleExportCSV}
+                                                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-file-csv text-green-600"></i>
+                                                Exportar CSV
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
                             <Button
                                 variant="primary"
                                 onClick={() => { setEditingTransaction(null); setIsFormModalOpen(true); }}
