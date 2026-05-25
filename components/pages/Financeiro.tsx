@@ -52,6 +52,7 @@ interface FinancialSummary {
     total_venda_vale: number;
     total_retirada_proprietario: number;
     cash_balance: number;
+    previous_day_cash?: number;
 }
 
 interface FinancialCategory {
@@ -803,12 +804,55 @@ const Financeiro: React.FC = () => {
     const getKpiRows = (): [string, number][] => [
         ['Total de Receitas', summary?.total_revenue || 0],
         ['Total de Despesas', summary?.total_expenses || 0],
-        ['Saldo no Caixa', summary?.cash_balance || 0],
         ['Retirada pelo Proprietário', summary?.total_retirada_proprietario || 0],
         ['Total de Venda no Pix', summary?.total_venda_pix || 0],
         ['Total de Venda no Cartão', summary?.total_venda_cartao || 0],
         ['Total de Venda no Vale', summary?.total_venda_vale || 0],
     ];
+
+    // Total líquido do detalhamento = entradas − saídas (mesma classificação do
+    // trigger update_account_balance no backend). Transferências são neutras.
+    const REVENUE_TYPES = ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix', 'Depósito'];
+    const EXPENSE_TYPES = ['Despesa', 'Despesas Diversas', 'Retirada pelo Proprietário'];
+    const netTransactionsTotal = (rows: any[]): number =>
+        rows.reduce((s, t) => {
+            const amt = Number(t.amount || 0);
+            if (REVENUE_TYPES.includes(t.type)) return s + amt;
+            if (EXPENSE_TYPES.includes(t.type)) return s - amt;
+            return s;
+        }, 0);
+
+    // ====================================
+    // FECHAMENTO DE CAIXA (resumo no fim do relatório)
+    // SALDO TOTAL = CAIXA DIA ANTERIOR + RECEITA − DESPESA − CONTAS A RECEBER
+    // ====================================
+    const SALES_TYPES = ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix', 'Depósito'];
+    const OPEN_STATUS = ['Pendente', 'Vencido'];
+
+    const dateLabelForClosing = (): string => {
+        if (dateRange.start && dateRange.end && dateRange.start !== dateRange.end) {
+            return `${formatDate(dateRange.start)} a ${formatDate(dateRange.end)}`;
+        }
+        const single = dateRange.start || dateRange.end;
+        return single ? formatDate(single) : 'Todas as datas';
+    };
+
+    // Usa o conjunto completo do período (transactions), independente da busca/filtros de tela.
+    const buildCashClosing = () => {
+        const sum = (pred: (t: any) => boolean) =>
+            transactions.filter(pred).reduce((s, t) => s + Number(t.amount || 0), 0);
+
+        // RECEITA = todas as vendas do período (pagas ou a prazo), exceto canceladas.
+        const receita = sum(t => SALES_TYPES.includes(t.type) && t.status !== 'Cancelado');
+        // DESPESA = saídas pagas.
+        const despesa = sum(t => EXPENSE_TYPES.includes(t.type) && t.status === 'Pago');
+        // CONTAS A RECEBER = vendas a prazo ainda em aberto.
+        const contasAReceber = sum(t => SALES_TYPES.includes(t.type) && OPEN_STATUS.includes(t.status));
+        const caixaDiaAnterior = Number(summary?.previous_day_cash || 0);
+        const saldoTotal = caixaDiaAnterior + receita - despesa - contasAReceber;
+
+        return { date: dateLabelForClosing(), caixaDiaAnterior, receita, despesa, contasAReceber, saldoTotal };
+    };
 
     const handleExportPDF = () => {
         const jsPdfFactory = (window as any).jspdf?.jsPDF;
@@ -882,7 +926,7 @@ const Financeiro: React.FC = () => {
                 margin: { left: 40, right: 40 },
             });
         } else {
-            const total = ctx.rows.reduce((s, t) => s + Number(t.amount || 0), 0);
+            const total = netTransactionsTotal(ctx.rows);
             const body = ctx.rows.map((t) => [
                 t.transaction_code,
                 formatDate(t.transaction_date),
@@ -917,6 +961,51 @@ const Financeiro: React.FC = () => {
             });
         }
 
+        // ====================================
+        // RESUMO / FECHAMENTO DE CAIXA
+        // ====================================
+        const cc = buildCashClosing();
+
+        // Garante que título + tabela caibam juntos; senão, nova página.
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const estimatedHeight = 16 + 7 * 18; // título + tabela (header + 6 linhas)
+        let summaryTop = docAny.lastAutoTable.finalY + 24;
+        if (summaryTop + estimatedHeight > pageHeight - 30) {
+            doc.addPage();
+            summaryTop = 40;
+        }
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Resumo — Fechamento de Caixa', 40, summaryTop);
+
+        // Tabela — DESCRIÇÃO / VALOR
+        docAny.autoTable({
+            startY: summaryTop + 6,
+            head: [['DESCRIÇÃO', 'VALOR']],
+            body: [
+                ['DATA', cc.date],
+                ['CAIXA DIA ANTERIOR', formatCurrency(cc.caixaDiaAnterior)],
+                ['RECEITA', formatCurrency(cc.receita)],
+                ['DESPESA', formatCurrency(cc.despesa)],
+                ['CONTAS A RECEBER', formatCurrency(cc.contasAReceber)],
+                ['SALDO TOTAL', formatCurrency(cc.saldoTotal)],
+            ],
+            theme: 'grid',
+            tableWidth: 300,
+            styles: { fontSize: 9, cellPadding: 4 },
+            headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold' },
+            columnStyles: { 0: { fontStyle: 'bold' }, 1: { halign: 'right' } },
+            margin: { left: 40 },
+            pageBreak: 'avoid',
+            didParseCell: (data: any) => {
+                if (data.section === 'body' && data.row.index === 5) {
+                    data.cell.styles.fontStyle = 'bold';
+                    data.cell.styles.fillColor = [243, 244, 246];
+                }
+            },
+        });
+
         doc.save(`financeiro-${ctx.key}-${dateStampForFile()}.pdf`);
         setToast({ message: `Exportado ${ctx.rows.length} registro(s) em PDF.`, type: 'success' });
         setShowExportMenu(false);
@@ -950,9 +1039,21 @@ const Financeiro: React.FC = () => {
                 esc(t.account?.name || '-'), esc(t.description), esc(t.client?.name || '-'),
                 num(t.amount), esc(t.status),
             ].join(sep)));
-            const total = ctx.rows.reduce((s, t) => s + Number(t.amount || 0), 0);
+            const total = netTransactionsTotal(ctx.rows);
             lines.push(['', '', '', '', '', esc('TOTAL'), num(total), ''].join(sep));
         }
+
+        // Resumo / Fechamento de Caixa
+        const cc = buildCashClosing();
+        lines.push('');
+        lines.push('Resumo - Fechamento de Caixa');
+        lines.push([esc('DESCRIÇÃO'), esc('VALOR')].join(sep));
+        lines.push([esc('DATA'), esc(cc.date)].join(sep));
+        lines.push([esc('CAIXA DIA ANTERIOR'), num(cc.caixaDiaAnterior)].join(sep));
+        lines.push([esc('RECEITA'), num(cc.receita)].join(sep));
+        lines.push([esc('DESPESA'), num(cc.despesa)].join(sep));
+        lines.push([esc('CONTAS A RECEBER'), num(cc.contasAReceber)].join(sep));
+        lines.push([esc('SALDO TOTAL'), num(cc.saldoTotal)].join(sep));
 
         const csv = '﻿' + lines.join('\n');
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -973,7 +1074,7 @@ const Financeiro: React.FC = () => {
             <div className="space-y-6">
                 <PageHeader title="Gestão Financeira" />
 
-                {/* KPIs - Layout com ícone no topo (duas linhas: 4 + 3) */}
+                {/* KPIs - Layout com ícone no topo (6 cards) */}
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                     <KPICard
                         title="Total de Receitas"
@@ -986,12 +1087,6 @@ const Financeiro: React.FC = () => {
                         value={formatCurrency(summary?.total_expenses || 0)}
                         icon="fas fa-arrow-down"
                         color="bg-rose-500"
-                    />
-                    <KPICard
-                        title="Saldo no Caixa"
-                        value={formatCurrency(summary?.cash_balance || 0)}
-                        icon="fas fa-cash-register"
-                        color="bg-blue-500"
                     />
                     <KPICard
                         title="Retirada pelo Proprietário"
