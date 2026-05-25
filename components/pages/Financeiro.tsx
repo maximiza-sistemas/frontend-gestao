@@ -824,7 +824,7 @@ const Financeiro: React.FC = () => {
 
     // ====================================
     // FECHAMENTO DE CAIXA (resumo no fim do relatório)
-    // SALDO TOTAL = CAIXA DIA ANTERIOR + RECEITA − DESPESA − CONTAS A RECEBER
+    // SALDO TOTAL = RECEITA − DESPESA − CONTAS A RECEBER
     // ====================================
     const SALES_TYPES = ['Receita', 'Contas a Receber', 'Venda no Vale', 'Venda no Cartão', 'Venda no Pix', 'Depósito'];
     const OPEN_STATUS = ['Pendente', 'Vencido'];
@@ -848,10 +848,9 @@ const Financeiro: React.FC = () => {
         const despesa = sum(t => EXPENSE_TYPES.includes(t.type) && t.status === 'Pago');
         // CONTAS A RECEBER = vendas a prazo ainda em aberto.
         const contasAReceber = sum(t => SALES_TYPES.includes(t.type) && OPEN_STATUS.includes(t.status));
-        const caixaDiaAnterior = Number(summary?.previous_day_cash || 0);
-        const saldoTotal = caixaDiaAnterior + receita - despesa - contasAReceber;
+        const saldoTotal = receita - despesa - contasAReceber;
 
-        return { date: dateLabelForClosing(), caixaDiaAnterior, receita, despesa, contasAReceber, saldoTotal };
+        return { date: dateLabelForClosing(), receita, despesa, contasAReceber, saldoTotal };
     };
 
     const handleExportPDF = () => {
@@ -968,7 +967,7 @@ const Financeiro: React.FC = () => {
 
         // Garante que título + tabela caibam juntos; senão, nova página.
         const pageHeight = doc.internal.pageSize.getHeight();
-        const estimatedHeight = 16 + 7 * 18; // título + tabela (header + 6 linhas)
+        const estimatedHeight = 16 + 6 * 18; // título + tabela (header + 5 linhas)
         let summaryTop = docAny.lastAutoTable.finalY + 24;
         if (summaryTop + estimatedHeight > pageHeight - 30) {
             doc.addPage();
@@ -985,7 +984,6 @@ const Financeiro: React.FC = () => {
             head: [['DESCRIÇÃO', 'VALOR']],
             body: [
                 ['DATA', cc.date],
-                ['CAIXA DIA ANTERIOR', formatCurrency(cc.caixaDiaAnterior)],
                 ['RECEITA', formatCurrency(cc.receita)],
                 ['DESPESA', formatCurrency(cc.despesa)],
                 ['CONTAS A RECEBER', formatCurrency(cc.contasAReceber)],
@@ -999,7 +997,7 @@ const Financeiro: React.FC = () => {
             margin: { left: 40 },
             pageBreak: 'avoid',
             didParseCell: (data: any) => {
-                if (data.section === 'body' && data.row.index === 5) {
+                if (data.section === 'body' && data.row.index === 4) {
                     data.cell.styles.fontStyle = 'bold';
                     data.cell.styles.fillColor = [243, 244, 246];
                 }
@@ -1049,7 +1047,6 @@ const Financeiro: React.FC = () => {
         lines.push('Resumo - Fechamento de Caixa');
         lines.push([esc('DESCRIÇÃO'), esc('VALOR')].join(sep));
         lines.push([esc('DATA'), esc(cc.date)].join(sep));
-        lines.push([esc('CAIXA DIA ANTERIOR'), num(cc.caixaDiaAnterior)].join(sep));
         lines.push([esc('RECEITA'), num(cc.receita)].join(sep));
         lines.push([esc('DESPESA'), num(cc.despesa)].join(sep));
         lines.push([esc('CONTAS A RECEBER'), num(cc.contasAReceber)].join(sep));
