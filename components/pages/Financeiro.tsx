@@ -181,6 +181,28 @@ const PaginationControls: React.FC<{
     );
 };
 
+// Formas de recebimento disponíveis para Receitas (espelha o "À Vista Combinado" dos pedidos).
+// Cada forma é mapeada para o tipo de transação correspondente, aproveitando os KPIs já existentes
+// (Venda no Pix / Venda no Cartão). payment_method precisa respeitar o CHECK da tabela
+// financial_transactions (Cartão genérico não existe no CHECK, então fica null).
+type ReceiptMethod = 'Dinheiro' | 'Pix' | 'Cartão' | 'Transferência' | 'Boleto';
+
+const RECEIPT_METHODS: { key: ReceiptMethod; label: string; icon: string }[] = [
+    { key: 'Dinheiro', label: 'Dinheiro', icon: 'fa-money-bill-wave' },
+    { key: 'Pix', label: 'Pix', icon: 'fa-qrcode' },
+    { key: 'Cartão', label: 'Cartão', icon: 'fa-credit-card' },
+    { key: 'Transferência', label: 'Transferência', icon: 'fa-building-columns' },
+    { key: 'Boleto', label: 'Boleto', icon: 'fa-barcode' }
+];
+
+const RECEIPT_METHOD_MAP: Record<ReceiptMethod, { type: string; payment_method: string | null }> = {
+    'Dinheiro': { type: 'Receita', payment_method: 'Dinheiro' },
+    'Pix': { type: 'Venda no Pix', payment_method: 'Pix' },
+    'Cartão': { type: 'Venda no Cartão', payment_method: null },
+    'Transferência': { type: 'Receita', payment_method: 'Transferência' },
+    'Boleto': { type: 'Receita', payment_method: 'Boleto' }
+};
+
 const TransactionForm: React.FC<{
     onSave: (data: any) => Promise<void>;
     onClose: () => void;
@@ -217,6 +239,30 @@ const TransactionForm: React.FC<{
     const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
     const [attachmentPreview, setAttachmentPreview] = useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+    // Formas de recebimento (apenas para Receita em modo de criação).
+    // selectedMethods = formas escolhidas; methodAmounts = valor por forma quando há mais de uma.
+    const [selectedMethods, setSelectedMethods] = useState<ReceiptMethod[]>(['Dinheiro']);
+    const [methodAmounts, setMethodAmounts] = useState<Record<string, string>>({});
+    const isReceita = formData.type === 'Receita';
+    const showReceiptMethods = isReceita && !transactionToEdit;
+
+    const toggleMethod = (key: ReceiptMethod) => {
+        setSelectedMethods(prev => {
+            if (prev.includes(key)) {
+                if (prev.length === 1) return prev; // mantém ao menos uma forma
+                return prev.filter(m => m !== key);
+            }
+            return [...prev, key];
+        });
+    };
+
+    const totalAmount = parseFloat((formData.amount || '').replace(',', '.')) || 0;
+    const methodsSum = selectedMethods.reduce(
+        (sum, m) => sum + (parseFloat((methodAmounts[m] || '').replace(',', '.')) || 0),
+        0
+    );
+    const sumMatchesTotal = Math.abs(methodsSum - totalAmount) < 0.01;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -279,7 +325,8 @@ const TransactionForm: React.FC<{
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onSave({
+
+        const baseData = {
             ...formData,
             due_date: formData.transaction_date,
             amount: parseFloat(formData.amount.replace(',', '.')),
@@ -289,7 +336,40 @@ const TransactionForm: React.FC<{
             client_id: formData.client_id ? Number(formData.client_id) : null,
             supplier_id: formData.supplier_id ? Number(formData.supplier_id) : null,
             receipt_file: attachmentFile || undefined
-        });
+        };
+
+        // Receita: gera uma transação por forma de recebimento escolhida.
+        if (showReceiptMethods) {
+            const multiple = selectedMethods.length > 1;
+
+            if (multiple && !sumMatchesTotal) {
+                alert(`A soma das formas (${formatCurrency(methodsSum)}) deve ser igual ao valor total (${formatCurrency(totalAmount)}).`);
+                return;
+            }
+
+            const splits = selectedMethods.map((method: ReceiptMethod) => {
+                const mapped = RECEIPT_METHOD_MAP[method];
+                const amount = multiple
+                    ? (parseFloat((methodAmounts[method] || '').replace(',', '.')) || 0)
+                    : totalAmount;
+                return {
+                    type: mapped.type,
+                    payment_method: mapped.payment_method,
+                    amount,
+                    description: multiple ? `${formData.description} (${method})` : formData.description
+                };
+            });
+
+            if (multiple && splits.some(s => s.amount <= 0)) {
+                alert('Informe um valor maior que zero para cada forma de recebimento.');
+                return;
+            }
+
+            onSave({ ...baseData, splits });
+            return;
+        }
+
+        onSave(baseData);
     };
 
     const isRevenue = formData.type === 'Receita' || formData.type === 'Contas a Receber' || formData.type === 'Venda no Vale' || formData.type === 'Venda no Cartão' || formData.type === 'Venda no Pix';
@@ -350,6 +430,7 @@ const TransactionForm: React.FC<{
                         name="amount"
                         value={formData.amount}
                         onChange={handleChange}
+                        onWheel={(e) => e.currentTarget.blur()}
                         required
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                     />
@@ -366,6 +447,61 @@ const TransactionForm: React.FC<{
                     />
                 </div>
             </div>
+
+            {/* Formas de Recebimento (apenas Receita, na criação) */}
+            {showReceiptMethods && (
+                <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Forma(s) de Recebimento
+                    </label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {RECEIPT_METHODS.map(({ key, label, icon }) => {
+                            const active = selectedMethods.includes(key);
+                            return (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    onClick={() => toggleMethod(key)}
+                                    className={`flex items-center justify-center gap-2 p-2 border rounded-md text-sm font-medium transition-all ${active
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
+                                        }`}
+                                >
+                                    <i className={`fas ${icon}`}></i>
+                                    {label}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {selectedMethods.length > 1 && (
+                        <div className="mt-3 space-y-2">
+                            {selectedMethods.map((method: ReceiptMethod) => (
+                                <div key={method} className="flex items-center gap-2">
+                                    <span className="w-32 text-sm text-gray-600">{method}</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={methodAmounts[method] || ''}
+                                        onChange={(e) => setMethodAmounts(prev => ({ ...prev, [method]: e.target.value }))}
+                                        onWheel={(e) => e.currentTarget.blur()}
+                                        placeholder="0.00"
+                                        className="flex-1 border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+                                    />
+                                </div>
+                            ))}
+                            <div className={`flex justify-between text-sm font-medium pt-1 ${sumMatchesTotal ? 'text-green-600' : 'text-red-600'}`}>
+                                <span>Soma das formas:</span>
+                                <span>{formatCurrency(methodsSum)} / {formatCurrency(totalAmount)}</span>
+                            </div>
+                        </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                        Selecione uma ou mais formas. Pix e Cartão são registrados como "Venda no Pix" e "Venda no Cartão".
+                    </p>
+                </div>
+            )}
 
             {/* Conta e Categoria ocultas conforme solicitado */}
             <input type="hidden" name="account_id" value={formData.account_id} />
@@ -640,20 +776,35 @@ const Financeiro: React.FC = () => {
     const handleSaveTransaction = async (data: any) => {
         setIsSubmitting(true);
         try {
-            let response;
             if (editingTransaction) {
-                response = await api.updateFinancialTransaction(editingTransaction.id, data);
+                const response = await api.updateFinancialTransaction(editingTransaction.id, data);
+                if (!response.success) throw new Error(response.error || 'Erro ao salvar transação');
+                setToast({ message: 'Transação atualizada com sucesso!', type: 'success' });
+            } else if (Array.isArray(data.splits) && data.splits.length > 0) {
+                // Receita com múltiplas formas de recebimento: uma transação por forma.
+                // O comprovante é anexado apenas à primeira.
+                const { splits, receipt_file, ...base } = data;
+                for (let i = 0; i < splits.length; i++) {
+                    const split = splits[i];
+                    const response = await api.createFinancialTransaction({
+                        ...base,
+                        type: split.type,
+                        payment_method: split.payment_method,
+                        amount: split.amount,
+                        description: split.description,
+                        receipt_file: i === 0 ? receipt_file : undefined
+                    });
+                    if (!response.success) throw new Error(response.error || 'Erro ao salvar transação');
+                }
+                setToast({ message: splits.length > 1 ? 'Transações criadas com sucesso!' : 'Transação criada com sucesso!', type: 'success' });
             } else {
-                response = await api.createFinancialTransaction(data);
+                const response = await api.createFinancialTransaction(data);
+                if (!response.success) throw new Error(response.error || 'Erro ao salvar transação');
+                setToast({ message: 'Transação criada com sucesso!', type: 'success' });
             }
-            if (response.success) {
-                setToast({ message: editingTransaction ? 'Transação atualizada com sucesso!' : 'Transação criada com sucesso!', type: 'success' });
-                setIsFormModalOpen(false);
-                setEditingTransaction(null);
-                loadInitialData();
-            } else {
-                throw new Error(response.error || 'Erro ao salvar transação');
-            }
+            setIsFormModalOpen(false);
+            setEditingTransaction(null);
+            loadInitialData();
         } catch (error) {
             console.error('Erro ao salvar transação:', error);
             setToast({ message: 'Erro ao salvar transação', type: 'error' });
